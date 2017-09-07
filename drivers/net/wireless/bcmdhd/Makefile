@@ -172,7 +172,6 @@ ifeq ($(shell expr $(ANDROID_PLATFORM_VERSION) \< 7),1)
 DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
 $(warning WiFi will be using Legacy file path)
 endif
-endif
 
 # TCP SYNC flood attack block
 DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=50
