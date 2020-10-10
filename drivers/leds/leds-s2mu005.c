@@ -136,7 +136,7 @@ static int ta_notification(struct notifier_block *nb,
 				goto gpio_free_data;
 			}
 		}
-		if (gpio_get_value(led_data->torch_pin)) {
+		if (gpio_get_value(led_data->torch_pin) && (assistive_light == true)) {
 			gpio_direction_output(led_data->torch_pin, 0);
 			gpio_direction_output(led_data->torch_pin, 1);
 			goto gpio_free_data;
@@ -233,6 +233,7 @@ static void led_set(struct s2mu005_led_data *led_data)
 	pr_info("%s start led_set\n", __func__);
 
 	if (led_data->test_brightness == LED_OFF) {
+		pr_info("%s led off\n", __func__);
 		ret = s2mu005_update_reg(led_data->i2c, reg,
 				led_data->data->brightness, mask);
 		if (ret < 0)
@@ -609,10 +610,8 @@ static ssize_t rear_flash_store(struct device *dev,
 
 		if (front_torch == true) {
 			value = S2MU005_CH2_TORCH_ON_GPIO;
-			s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
 		} else {
-			//value = 0;
-			value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH1_FLASH_ON_GPIO;
+			value = S2MU005_FLASH_TORCH_OFF;
 			/* brightness set - Rear pre-flash*/
 			s2mu005_update_reg(led_data->i2c, S2MU005_REG_FLED_CH1_CTRL1,
 				led_data->preflash_brightness, S2MU005_TORCH_IOUT_MASK);
@@ -637,6 +636,7 @@ static ssize_t rear_flash_store(struct device *dev,
 		/* Turn on Torch Step 25mA ~ 250mA */
 		temp = (mode - 1000) * 25;
 		brightness= S2MU005_TORCH_BRIGHTNESS(temp);
+		value = S2MU005_CH1_TORCH_ON_GPIO;
 	} else {
 		pr_info("[LED]%s , Invalid value:%d\n", __func__, mode);
 		goto err;
@@ -712,14 +712,17 @@ static ssize_t front_flash_store(struct device *dev,
 
 	if (mode == 0) {
 		/* Turn off Torch */
+		value = S2MU005_FLASH_TORCH_OFF;
 		brightness = LED_OFF;
 		assistive_light = false;
 	} else if (mode == 1) {
 		/* Turn on Torch */
+		value = S2MU005_CH2_TORCH_ON_GPIO;
 		brightness = led_data->front_brightness;
 		assistive_light = true;
 	} else if (mode == 100) {
 		/* Factory mode Turn on Torch */
+		value = S2MU005_CH2_TORCH_ON_GPIO;
 		brightness = led_data->factory_brightness;
 	} else {
 		pr_info("[LED]%s , Invalid value:%d\n", __func__, mode);
@@ -733,8 +736,6 @@ static ssize_t front_flash_store(struct device *dev,
 
 #ifdef CONFIG_S2MU005_LEDS_I2C
 	value = S2MU005_FLASH_TORCH_OFF;
-#else
-	value = S2MU005_CH2_TORCH_ON_GPIO;
 #endif
 	s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
 	s2mu005_led_set(led_cdev, brightness);
@@ -1092,12 +1093,12 @@ static int s2mu005_led_probe(struct platform_device *pdev)
 		goto fled_pincfg_err;
 	}
 
-	ret = pinctrl_select_state(pdata->fled_pinctrl, pdata->gpio_state_active);
+	ret = pinctrl_select_state(pdata->fled_pinctrl, pdata->gpio_state_suspend);
 	if (ret) {
 		pr_err("%s:%d cannot set pin to suspend state", __func__, __LINE__);
 		goto fled_pincfg_err;
 	} else {
-		fled_gpio_config = FLED_GPIO_OS;
+		fled_gpio_config = FLED_GPIO_ISP;
 	}
 
 fled_pincfg_err:

@@ -27,6 +27,8 @@ extern struct mipi_dsim_lcd_driver s6e3fa3_mipi_lcd_driver;
 extern struct mipi_dsim_lcd_driver s6e3fa3_mipi_lcd_driver;
 #elif defined(CONFIG_PANEL_EA8061_DYNAMIC)
 extern struct mipi_dsim_lcd_driver ea8061_mipi_lcd_driver;
+#elif defined(CONFIG_PANEL_S6E3FA3_J7XE)
+extern struct mipi_dsim_lcd_driver s6e3fa3_mipi_lcd_driver;
 #endif
 
 int dsim_panel_ops_init(struct dsim_device *dsim);

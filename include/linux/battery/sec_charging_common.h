@@ -490,6 +490,8 @@ struct sec_battery_platform_data {
 	unsigned int swelling_high_rechg_voltage;
 	unsigned int swelling_low_rechg_voltage;
 	unsigned int swelling_block_time;
+	unsigned int swelling_high_temp_topoff;
+	unsigned int swelling_low_temp_topoff;
 
 	/* self discharging */
 	bool self_discharging_en;
@@ -664,13 +666,6 @@ struct sec_battery_platform_data {
 	bool wchg_ctl_en;
 	bool always_enable;
 
-#if defined(CONFIG_SW_SELF_DISCHARGING)
-	int self_discharging_temp_block;
-	int self_discharging_volt_block;
-	int self_discharging_temp_recov;
-	int self_discharging_temp_pollingtime;
-#endif
-
 	/* ADC setting */
 	unsigned int adc_check_count;
 	/* ADC type for each channel */
@@ -712,6 +707,12 @@ struct sec_charger_platform_data {
 	int siop_wireless_charging_limit_current;
 	int siop_hv_wireless_input_limit_current;
 	int siop_hv_wireless_charging_limit_current;
+
+	unsigned int swelling_high_chg_current;
+	unsigned int swelling_low_chg_current;
+	
+	int swelling_low_temp_recov;
+	int swelling_high_temp_recov;
 
 	bool support_slow_charging;
 

@@ -23,8 +23,6 @@
 
 #include "ltm184hl01_param.h"
 
-#define BoostUPbrightness 3
-
 int	backlight_on;
 int board_rev;
 int lvds_disp_on_comp;
@@ -85,13 +83,12 @@ struct lcd_info {
 	unsigned int coordinate[2];
 	unsigned char date[7];
 	unsigned int state;
-	unsigned int auto_brightness;
+	unsigned int brightness;
 	unsigned int br_index;
 	unsigned int acl_enable;
 	unsigned int current_acl;
 	unsigned int current_hbm;
 	unsigned int siop_enable;
-	unsigned int weakness_hbm_comp;
 
 	unsigned char **hbm_tbl;
 	unsigned char **acl_cutoff_tbl;
@@ -119,18 +116,11 @@ static int panel_get_brightness(struct backlight_device *bd)
 static int panel_set_brightness(struct backlight_device *bd)
 {
 	int ret = 0;
-	int brightness = bd->props.brightness;
 	struct lcd_info *lcd = bl_get_data(bd);
-
-	if (brightness < UI_MIN_BRIGHTNESS || brightness > UI_MAX_BRIGHTNESS) {
-		pr_alert("Brightness should be in the range of 0 ~ 255\n");
-		ret = -EINVAL;
-		goto exit_set;
-	}
 
 	ret = dsim_panel_set_brightness(lcd, 0);
 	if (ret) {
-		dev_err(&lcd->ld->dev, "%s : failed to set brightness\n", __func__);
+		dev_err(&lcd->ld->dev, "%s: failed to set brightness\n", __func__);
 		goto exit_set;
 	}
 exit_set:
@@ -507,12 +497,11 @@ static void ltm184hl01_lvds_pwm_set(struct lcd_info *lcd)
 		return;
 	}
 
-	dev_info(&lcd->ld->dev, "[lcd] : %s was called- bl level(%d) autobl(%d) weakness_hbm(%d)\n", __func__,
-		lcd->bd->props.brightness, lcd->auto_brightness, lcd->weakness_hbm_comp);
+	dev_info(&lcd->ld->dev, "[lcd] : %s was called- bl level(%d)\n", __func__, lcd->bd->props.brightness);
 
 	level = lcd->bd->props.brightness;
 
-	if (lcd->auto_brightness >= 6 || lcd->weakness_hbm_comp == BoostUPbrightness) {
+	if (LEVEL_IS_HBM(level)) {
 		lp8558_array_write(backlight1_client, LP8558_BOOSTUP, ARRAY_SIZE(LP8558_BOOSTUP));
 		lp8558_array_write(backlight2_client, LP8558_BOOSTUP, ARRAY_SIZE(LP8558_BOOSTUP));
 	} else {
@@ -683,20 +672,18 @@ static struct i2c_driver lp8558_2_i2c_driver = {
 static int ltm184hl01_probe(struct dsim_device *dsim)
 {
 	int ret = 0;
-	struct lcd_info *lcd = dsim->priv.par;
 	struct panel_private *priv = &dsim->priv;
+	struct lcd_info *lcd = dsim->priv.par;
 
 	dev_info(&lcd->ld->dev, "[lcd] : %s was called new 0x%x %d\n", __func__ ,  lcdtype, board_rev);
 
 	priv->lcdConnected = PANEL_CONNECTED;
-	lcd->bd->props.max_brightness = UI_MAX_BRIGHTNESS;
+	lcd->bd->props.max_brightness = EXTEND_BRIGHTNESS;
 	lcd->bd->props.brightness = UI_DEFAULT_BRIGHTNESS;
 	lcd->dsim = dsim;
 	lcd->state = PANEL_STATE_RESUMED;
-	lcd->temperature = NORMAL_TEMPERATURE;
 	lcd->acl_enable = 0;
 	lcd->current_acl = 0;
-	lcd->auto_brightness = 0;
 	lcd->siop_enable = 0;
 	lcd->current_hbm = 0;
 
@@ -769,38 +756,6 @@ static ssize_t window_type_show(struct device *dev,
 	sprintf(buf, "%x %x %x\n", lcd->id[0], lcd->id[1], lcd->id[2]);
 
 	return strlen(buf);
-}
-
-static ssize_t auto_brightness_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct lcd_info *lcd = dev_get_drvdata(dev);
-
-	sprintf(buf, "%u\n", lcd->auto_brightness);
-
-	return strlen(buf);
-}
-
-static ssize_t auto_brightness_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct lcd_info *lcd = dev_get_drvdata(dev);
-	int value;
-	int rc;
-
-	rc = kstrtoul(buf, (unsigned int)0, (unsigned long *)&value);
-	if (rc < 0)
-		return rc;
-	else {
-		if (lcd->auto_brightness != value) {
-			dev_info(dev, "%s: %d, %d\n", __func__, lcd->auto_brightness, value);
-			mutex_lock(&lcd->lock);
-			lcd->auto_brightness = value;
-			mutex_unlock(&lcd->lock);
-			dsim_panel_set_brightness(lcd, 0);
-		}
-	}
-	return size;
 }
 
 static ssize_t siop_enable_show(struct device *dev,
@@ -901,51 +856,12 @@ static ssize_t temperature_store(struct device *dev,
 
 	return size;
 }
-#ifdef _BRIGHTNESS_BOOSTUP_
-static ssize_t weakness_hbm_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct lcd_info *lcd = dev_get_drvdata(dev);
-
-	sprintf(buf, "%d\n", lcd->weakness_hbm_comp);
-
-	return strlen(buf);
-}
-
-static ssize_t weakness_hbm_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	struct lcd_info *lcd = dev_get_drvdata(dev);
-	int value;
-	int rc;
-
-	rc = kstrtouint(buf, (unsigned int)0, &value);
-	if (rc < 0)
-		return rc;
-	else {
-		if (lcd->weakness_hbm_comp != value) {
-			dev_info(dev, "%s: %d, %d\n", __func__, lcd->weakness_hbm_comp, value);
-			if ((value == 1) || (value == 2)) {
-				pr_info("%s don't support 1,2\n", __func__);
-				return size;
-			}
-			lcd->weakness_hbm_comp = value;
-			dsim_panel_set_brightness(lcd, 0);
-		}
-	}
-	return size;
-}
-#endif
 
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
-static DEVICE_ATTR(auto_brightness, 0644, auto_brightness_show, auto_brightness_store);
 static DEVICE_ATTR(siop_enable, 0664, siop_enable_show, siop_enable_store);
 static DEVICE_ATTR(power_reduce, 0664, power_reduce_show, power_reduce_store);
 static DEVICE_ATTR(temperature, 0664, temperature_show, temperature_store);
-#ifdef _BRIGHTNESS_BOOSTUP_
-static DEVICE_ATTR(weakness_hbm_comp, 0664, weakness_hbm_show, weakness_hbm_store);
-#endif
 
 static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_lcd_type.attr,
@@ -956,20 +872,8 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	NULL,
 };
 
-static struct attribute *backlight_sysfs_attributes[] = {
-#ifdef _BRIGHTNESS_BOOSTUP_
-	&dev_attr_weakness_hbm_comp.attr,
-#endif
-	&dev_attr_auto_brightness.attr,
-	NULL,
-};
-
 static const struct attribute_group lcd_sysfs_attr_group = {
 	.attrs = lcd_sysfs_attributes,
-};
-
-static const struct attribute_group backlight_sysfs_attr_group = {
-	.attrs = backlight_sysfs_attributes,
 };
 
 static void lcd_init_sysfs(struct lcd_info *lcd)
@@ -979,10 +883,6 @@ static void lcd_init_sysfs(struct lcd_info *lcd)
 	ret = sysfs_create_group(&lcd->ld->dev.kobj, &lcd_sysfs_attr_group);
 	if (ret < 0)
 		dev_err(&lcd->ld->dev, "failed to add lcd sysfs\n");
-
-	ret = sysfs_create_group(&lcd->bd->dev.kobj, &backlight_sysfs_attr_group);
-	if (ret < 0)
-		dev_err(&lcd->ld->dev, "failed to add backlight sysfs\n");
 }
 
 
@@ -1002,21 +902,21 @@ static int dsim_panel_probe(struct dsim_device *dsim)
 
 	dsim->priv.par = lcd = kzalloc(sizeof(struct lcd_info), GFP_KERNEL);
 	if (!lcd) {
-		pr_err("%s : failed to allocate for lcd\n", __func__);
+		pr_err("%s: failed to allocate for lcd\n", __func__);
 		ret = -ENOMEM;
 		goto probe_err;
 	}
 
 	dsim->lcd = lcd->ld = lcd_device_register("panel", dsim->dev, lcd, NULL);
 	if (IS_ERR(lcd->ld)) {
-		pr_err("%s : failed to register lcd device\n", __func__);
+		pr_err("%s: failed to register lcd device\n", __func__);
 		ret = PTR_ERR(lcd->ld);
 		goto probe_err;
 	}
 
 	lcd->bd = backlight_device_register("panel", dsim->dev, lcd, &panel_backlight_ops, NULL);
 	if (IS_ERR(lcd->bd)) {
-		pr_err("%s : failed to register backlight device\n", __func__);
+		pr_err("%s: failed to register backlight device\n", __func__);
 		ret = PTR_ERR(lcd->bd);
 		goto probe_err;
 	}
@@ -1025,7 +925,7 @@ static int dsim_panel_probe(struct dsim_device *dsim)
 
 	ret = ltm184hl01_probe(dsim);
 	if (ret) {
-		dev_err(&lcd->ld->dev, "%s : failed to probe panel\n", __func__);
+		dev_err(&lcd->ld->dev, "%s: failed to probe panel\n", __func__);
 		goto probe_err;
 	}
 
@@ -1042,13 +942,13 @@ static int dsim_panel_lvds_init(struct dsim_device *dsim)
 	struct lcd_info *lcd = dsim->priv.par;
 	int ret = 0;
 
-	dev_info(&lcd->ld->dev, "%s : lvds init, panel state (%d)\n", __func__, lcd->state);
+	dev_info(&lcd->ld->dev, "%s: lvds init, panel state (%d)\n", __func__, lcd->state);
 
 	if (lcd->state == PANEL_STATE_SUSPENED) {
 		lcd->state = PANEL_STATE_RESUMED;
 		ret = ltm184hl01_lvds_init(lcd);
 		if (ret) {
-			dev_err(&lcd->ld->dev, "%s : failed to lvds init\n", __func__);
+			dev_err(&lcd->ld->dev, "%s: failed to lvds init\n", __func__);
 			lcd->state = PANEL_STATE_SUSPENED;
 			goto lvds_init_err;
 		}
@@ -1071,7 +971,7 @@ static int dsim_panel_displayon(struct dsim_device *dsim)
 
 	ret = ltm184hl01_displayon(lcd);
 	if (ret) {
-		dev_err(&lcd->ld->dev, "%s : failed to panel display on\n", __func__);
+		dev_err(&lcd->ld->dev, "%s: failed to panel display on\n", __func__);
 		goto displayon_err;
 	}
 
@@ -1091,7 +991,7 @@ static int dsim_panel_suspend(struct dsim_device *dsim)
 
 	ret = ltm184hl01_exit(lcd);
 	if (ret) {
-		dev_err(&lcd->ld->dev, "%s : failed to panel exit\n", __func__);
+		dev_err(&lcd->ld->dev, "%s: failed to panel exit\n", __func__);
 		goto suspend_err;
 	}
 

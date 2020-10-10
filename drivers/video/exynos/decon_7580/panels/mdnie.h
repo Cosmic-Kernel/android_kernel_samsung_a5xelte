@@ -27,7 +27,7 @@ enum SCENARIO {
 	HMT_16_MODE,
 	SCENARIO_MAX,
 	DMB_NORMAL_MODE = 20,
-	DMB_MODE_MAX,
+	DMB_MODE_MAX
 };
 
 enum BYPASS {
@@ -70,8 +70,8 @@ struct mdnie_seq_info {
 
 struct mdnie_table {
 	char *name;
-	unsigned int update_flag[8];
-	struct mdnie_seq_info seq[8 + 1];
+	unsigned int update_flag[4];
+	struct mdnie_seq_info seq[4 + 1];
 };
 
 struct mdnie_scr_info {
@@ -94,6 +94,7 @@ struct mdnie_tune {
 	unsigned char **coordinate_table;
 	unsigned char **adjust_ldu_table;
 	unsigned int max_adjust_ldu;
+	int (*get_hbm_index)(int);
 	int (*color_offset[])(int, int);
 };
 
@@ -107,9 +108,6 @@ typedef int (*mdnie_r)(void *devdata, u8 addr, u8 *buf, u32 len);
 
 
 struct mdnie_info {
-	struct clk		*bus_clk;
-	struct clk		*clk;
-
 	struct device		*dev;
 	struct mutex		dev_lock;
 	struct mutex		lock;
@@ -127,7 +125,6 @@ struct mdnie_info {
 	unsigned int		tuning;
 	unsigned int		accessibility;
 	unsigned int		color_correction;
-	unsigned int		auto_brightness;
 
 	char			path[50];
 

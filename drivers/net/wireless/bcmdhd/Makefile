@@ -29,7 +29,7 @@ DHDCFLAGS += -DBCMASSERT_LOG
 # Collect Current Assoc/Reject Status for Big Data logging
 DHDCFLAGS += -DDHD_ENABLE_BIGDATA_LOGGING
 # Enable SI utility error log
-DHDCFLAGS += -DBCMDBG_ERR
+DHDCFLAGS += -DSI_ERROR_ENFORCE
 
 # Print 8021X
 DHDCFLAGS += -DDHD_8021X_DUMP
@@ -126,7 +126,8 @@ DHDCFLAGS += -DDHD_USE_IDLECOUNT
 # Used short dwell time during initial scan
 DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
 
-# Japan ccode revision will be fixed by nvram's value
+# Korea and Japan ccode revision will be fixed by nvram's value
+DHDCFLAGS += -DKEEP_KR_REGREV
 DHDCFLAGS += -DKEEP_JP_REGREV
 
 # SKB TAILPAD to avoid out of boundary memory access
@@ -145,6 +146,23 @@ DHDCFLAGS += -DDHD_DONOT_FORWARD_BCMEVENT_AS_NETWORK_PKT
 
 # Customer scan timeout setting
 DHDCFLAGS += -DCUSTOMER_SCAN_TIMEOUT_SETTING
+
+# Android Version Check from Platform source
+CANDIDATE_VERSION_PATH := ./../../build/core ../../../../../../build/core out
+FOUND_VERSION_PATH := $(foreach dir,$(CANDIDATE_VERSION_PATH), $(wildcard $(dir)/version_defaults.mk))
+FOUND_VERSION_PATH := $(word 1, $(FOUND_VERSION_PATH))
+ifeq ($(FOUND_VERSION_PATH),)
+$(warning Not found Android version file. Set None)
+else
+# Extract version string and get major number
+ANDROID_PLATFORM_VERSION := $(shell grep "PLATFORM_VERSION := " $(FOUND_VERSION_PATH) | cut -d "=" -f 2 | cut -d "." -f 1 | sed 's/ //g')
+$(warning Android Platform Version : $(ANDROID_PLATFORM_VERSION))
+# If Android version lower than 7(Nougat) => Use Legacy File path
+ifeq ($(shell expr $(ANDROID_PLATFORM_VERSION) \< 7),1)
+DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
+$(warning Will be use Legacy file path)
+endif
+endif
 
 ##############################
 # Android Platform Definition
@@ -505,6 +523,10 @@ endif
   DHDCFLAGS += -DCUSTOM_ROAM_TIME_THRESH_IN_SUSPEND=6000
   DHDCFLAGS += -DMAX_DTIM_ALLOWED_INTERVAL=925
 
+ifeq ($(CONFIG_WLAN_ON7),y)
+  DHDCFLAGS += -DDHD_SUPPORT_TR_212
+endif
+
   # Remove common feature for BCM4343
   DHDCFLAGS :=$(filter-out -DDISABLE_11H_SOFTAP,$(DHDCFLAGS))
   DHDCFLAGS :=$(filter-out -DSUPPORT_P2P_GO_PS,$(DHDCFLAGS))
@@ -601,6 +623,10 @@ ifneq ($(CONFIG_MACH_UNIVERSAL5433),)
 DHDCFLAGS += -DSDIO_PADDING_FOR_BLK_TRANS
 endif
 ifneq ($(CONFIG_SOC_EXYNOS7870),)
+DHDCFLAGS += -DDHD_OF_SUPPORT
+DHDCFLAGS += -Wno-date-time
+endif
+ifneq ($(CONFIG_SOC_EXYNOS7420),)
 DHDCFLAGS += -DDHD_OF_SUPPORT
 DHDCFLAGS += -Wno-date-time
 endif

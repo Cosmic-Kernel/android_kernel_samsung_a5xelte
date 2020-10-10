@@ -33,6 +33,7 @@
 #include <linux/muic/muic_afc.h>
 
 //#define SM5705_CHG_FULL_DEBUG 1
+extern bool slate_mode_state;
 
 enum {
 	SM5705_CHG_SRC_VBUS = 0x0,
@@ -435,12 +436,37 @@ static int sm5705_CHG_set_FASTCHG(struct sm5705_charger_data *charger,
 				unsigned char index, unsigned short FASTCHG_mA)
 {
 	unsigned char offset = _calc_FASTCHG_current_offset_to_mA(FASTCHG_mA);
+	union power_supply_propval swelling_state;
 
 	pr_info("FASTCHG src=%d, current=%dmA offset=0x%x\n", index, FASTCHG_mA, offset);
 
 	if (index > SM5705_CHG_SRC_WPC) {
 		return -EINVAL;
 	}
+
+#if defined(CONFIG_BATTERY_SWELLING)	
+	psy_do_property("battery", get,
+			POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+			swelling_state);
+	if (charger->is_charging && swelling_state.intval) {
+		int swelling_charging_current;
+		union power_supply_propval value_temp;
+		psy_do_property("battery", get, POWER_SUPPLY_PROP_TEMP, value_temp);
+		if (value_temp.intval < charger->pdata->swelling_low_temp_recov)
+			swelling_charging_current = charger->pdata->swelling_low_chg_current;
+		else
+			swelling_charging_current = charger->pdata->swelling_high_chg_current;
+
+		if (FASTCHG_mA > swelling_charging_current) {
+			FASTCHG_mA = swelling_charging_current;
+			offset = _calc_FASTCHG_current_offset_to_mA(FASTCHG_mA);
+			pr_info("swelling_state = %d, changed current = %d, offset = 0x%x\n",
+				swelling_state.intval, FASTCHG_mA, offset);
+		}
+	}
+#else
+	swelling_state.intval = 0;
+#endif
 
 	sm5705_write_reg(charger->i2c, SM5705_REG_CHGCNTL2 + index, offset);
 
@@ -980,6 +1006,10 @@ static int sm5705_chg_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
 		psy_chg_set_cable_online(charger, val->intval);
+		if (slate_mode_state)
+			sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_SUSPEND_MODE, true);
+		else
+			sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_SUSPEND_MODE, false);		
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		pr_info("POWER_SUPPLY_PROP_CURRENT_MAX - current=%d\n", val->intval);
@@ -1000,6 +1030,10 @@ static int sm5705_chg_set_property(struct power_supply *psy,
 		pr_info("POWER_SUPPLY_PROP_CURRENT_NOW - current=%d\n", val->intval);
 		sm5705_set_charge_current(charger, val->intval);
 		sm5705_set_input_current(charger, val->intval);
+		if (slate_mode_state)
+			sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_SUSPEND_MODE, true);
+		else
+			sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_SUSPEND_MODE, false);		
 		break;
 #if defined(CONFIG_AFC_CHARGER_MODE)
 	case POWER_SUPPLY_PROP_AFC_CHARGER_MODE:
@@ -2064,6 +2098,36 @@ static int _parse_battery_node_propertys(struct device *dev, struct device_node 
 			i, &pdata->charging_current[i].full_check_current_2nd);
 	}
 
+#if defined(CONFIG_BATTERY_SWELLING)
+	ret = of_property_read_u32(np, "battery,swelling_high_chg_current",
+		&pdata->swelling_high_chg_current);
+	if (IS_ERR_VALUE(ret)) {
+		pr_info("%s: swelling high temp chg current is Empty\n", __func__);
+		pdata->swelling_high_chg_current = 1000;
+	}
+
+	ret = of_property_read_u32(np, "battery,swelling_low_chg_current",
+		&pdata->swelling_low_chg_current);
+	if (IS_ERR_VALUE(ret)) {
+		pr_info("%s: swelling low temp chg current is Empty\n", __func__);
+		pdata->swelling_low_chg_current = 1000;
+	}
+
+	ret = of_property_read_u32(np, "battery,swelling_high_temp_recov",
+				   &pdata->swelling_high_temp_recov);
+	if (IS_ERR_VALUE(ret)) {
+		pr_info("%s: swelling high temp recovery is Empty\n", __func__);
+		pdata->swelling_low_temp_recov = 360;
+	}
+
+	ret = of_property_read_u32(np, "battery,swelling_low_temp_recov",
+				   &pdata->swelling_low_temp_recov);
+	if (IS_ERR_VALUE(ret)) {
+		pr_info("%s: swelling low temp recovery is Empty\n", __func__);
+		pdata->swelling_low_temp_recov = 150;
+	}
+#endif
+
 	pr_info("dt:battery node parse done.\n");
 
 	return 0;
@@ -2231,7 +2295,7 @@ static void sm5705_charger_initialize(struct sm5705_charger_data *charger)
 
 	sm5705_CHG_enable_AUTOSET(charger, 1);
 
-	sm5705_CHG_set_BST_IQ3LIMIT(charger, SM5705_CHG_BST_IQ3LIMIT_3_5A);
+	sm5705_CHG_set_BST_IQ3LIMIT(charger, SM5705_CHG_BST_IQ3LIMIT_4_0A);
 
 	sm5705_CHG_set_OVPSEL(charger, 1); /* fix OVPSEL */
 

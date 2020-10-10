@@ -69,7 +69,7 @@ enum {
 #define OLED_CMD_AID_CNT		5
 #define OLED_CMD_GAMMA			0xCA
 
-#define MAX_BR_INFO				62
+#define MAX_BR_INFO				63
 
 #define HAS_NO_V0_GAMMA
 

@@ -1169,7 +1169,7 @@ static int decon_blank(int blank_mode, struct fb_info *info)
 
 blank_exit:
 	decon_lpd_unblock(decon);
-	decon_info("%s -- blank_mode : %d \n", __func__, blank_mode);
+	decon_info("%s -- blank_mode : %d, %d\n", __func__, blank_mode, ret);
 	return ret;
 }
 
@@ -2191,15 +2191,29 @@ static int decon_set_win_config(struct decon_device *decon,
 	struct decon_reg_data *regs;
 	struct sync_fence *fence;
 	struct sync_pt *pt;
-	int fd;
+	int fd, unused_fd[3] = {0}, fd_idx = 0;
 	int plane_cnt = 0;
 	unsigned int bw = 0;
 
-	fd = get_unused_fd();
-	if (fd < 0)
-		return fd;
-
 	mutex_lock(&decon->output_lock);
+	fd = get_unused_fd();
+	if (fd < 0) {
+		mutex_unlock(&decon->output_lock);
+		return -EINVAL;
+	}
+
+	if (fd < 3) {
+		/* If fd from get_unused_fd() has value between 0 and 2,
+		 * fd is tried to get value again using dup() except current fd vlaue.
+		 */
+		while (fd < 3) {
+			unused_fd[fd_idx++] = fd;
+			fd = get_unused_fd();
+		}
+
+		while (fd_idx-- > 0)
+			put_unused_fd(unused_fd[fd_idx]);
+	}
 
 	if ((decon->state == DECON_STATE_OFF) || (decon->ignore_vsync == true)
 		|| (decon->out_type == DECON_OUT_TUI)) {
@@ -2349,7 +2363,7 @@ static ssize_t decon_fb_read(struct fb_info *info, char __user *buf,
 	return 0;
 }
 
-static ssize_t decon_fb_write(struct fb_info *info, char const __user *buf,
+static ssize_t decon_fb_write(struct fb_info *info, const char __user *buf,
 		size_t count, loff_t *ppos)
 {
 	return 0;
@@ -2360,6 +2374,7 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 {
 	struct decon_win *win = info->par;
 	struct decon_device *decon = win->decon;
+	struct decon_win_config_data win_data = { 0 };
 	int ret = 0;
 	u32 crtc;
 
@@ -2430,9 +2445,9 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		break;
 
 	case S3CFB_WIN_CONFIG:
-		if (copy_from_user(&decon->ioctl_data.win_data,
+		if (copy_from_user(&win_data,
 				   (struct decon_win_config_data __user *)arg,
-				   sizeof(decon->ioctl_data.win_data))) {
+				   sizeof(struct decon_win_config_data))) {
 			ret = -EFAULT;
 			break;
 		}
@@ -2442,13 +2457,12 @@ static int decon_ioctl(struct fb_info *info, unsigned int cmd,
 		else
 			DISP_SS_EVENT_LOG(DISP_EVT_WIN_CONFIG, &decon->sd, ktime_set(0, 0));
 
-		ret = decon_set_win_config(decon, &decon->ioctl_data.win_data);
+		ret = decon_set_win_config(decon, &win_data);
 		if (ret)
 			break;
 
 		if (copy_to_user(&((struct decon_win_config_data __user *)arg)->fence,
-				 &decon->ioctl_data.win_data.fence,
-				 sizeof(decon->ioctl_data.win_data.fence))) {
+				 &win_data.fence, sizeof(int))) {
 			ret = -EFAULT;
 			break;
 		}
@@ -4246,7 +4260,7 @@ static int decon_register_esd_funcion(struct decon_device *decon)
 			(det_irqf_type == IRQF_TRIGGER_RISING) ? "rising" : "falling");
 		ret++;
 
-		if (esd->err_pin_active == gpio_get_value(esd->disp_det_gpio)) {
+		if (esd->det_pin_active == gpio_get_value(esd->disp_det_gpio)) {
 			decon_info("%s: det(%d) is already %s(%d)\n", __func__, esd->disp_det_gpio,
 				(esd->det_pin_active) ? "high" : "low", gpio_get_value(esd->disp_det_gpio));
 		}
@@ -4725,6 +4739,13 @@ decon_init_done:
 #endif
 	decon->state = DECON_STATE_INIT;
 
+	/* [W/A] prevent sleep enter during LCD on */
+	ret = device_init_wakeup(decon->dev, true);
+	if (ret) {
+		dev_err(decon->dev, "failed to init wakeup device\n");
+		goto fail_thread;
+	}
+
 	pm_stay_awake(decon->dev);
 	dev_warn(decon->dev, "pm_stay_awake");
 	cam_stat = of_get_child_by_name(decon->dev->of_node, "cam-stat");
@@ -4748,7 +4769,7 @@ decon_init_done:
 #endif
 	decon_esd_enable_interrupt(decon);
 
-	decon_info("decon registered successfully");
+	decon_info("decon registered successfully\n");
 
 	return 0;
 

@@ -189,6 +189,10 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"AW", "AW", 2},
 	{"AU", "AU", 6},
 	{"AT", "AT", 4},
+#if defined(BCM43454_CHIP) || defined(BCM43455_CHIP)
+	{"AM", "AM", 1},
+	{"MY", "MY", 19},
+#endif /* BCM43454_CHIP || BCM43455 */
 	{"AZ", "AZ", 2},
 	{"BS", "BS", 2},
 	{"BH", "BH", 4},
@@ -241,7 +245,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"MO", "SG", 0},
 	{"MK", "MK", 2},
 	{"MW", "MW", 1},
-	{"MY", "MY", 3},
 	{"MV", "MV", 3},
 	{"MT", "MT", 4},
 	{"MQ", "MQ", 2},
@@ -279,7 +282,11 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"TW", "TW", 1},
 	{"TH", "TH", 5},
 	{"TT", "TT", 3},
+#if defined(DHD_SUPPORT_TR_212)
+	{"TR", "TR", 212},
+#else
 	{"TR", "TR", 7},
+#endif
 	{"AE", "AE", 6},
 	{"GB", "GB", 6},
 	{"UY", "VE", 3},
@@ -292,11 +299,11 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"SV", "SV", 25},
 	{"KR", "KR", 70},
 #if defined(BCM4354_CHIP) || defined(BCM43454_CHIP) || defined(BCM43455_CHIP)
-        {"JP", "JP", 968},
-        {"RU", "RU", 986},
+	{"JP", "JP", 968},
+	{"RU", "RU", 986},
 	{"UA", "UA", 16},
 #else
-        {"JP", "JP", 45}, 
+	{"JP", "JP", 45},
 	{"RU", "RU", 13},
 	{"UA", "UA", 8},
 #endif /* BCM4354_CHIP || BCM43454_CHIP || BCM43455_CHIP */
@@ -349,25 +356,19 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 }
 
 #ifdef PLATFORM_SLP
-#define CIDINFO "/opt/etc/.cid.info"
-#define PSMINFO "/opt/etc/.psm.info"
-#define MACINFO "/opt/etc/.mac.info"
-#define MACINFO_EFS NULL
-#define REVINFO "/opt/etc/.rev"
-#define WIFIVERINFO "/opt/etc/.wifiver.info"
-#define ANTINFO "/opt/etc/.ant.info"
+#define MACINFO_EFS "/csa/.mac.info"
 #define WRMAC_BUF_SIZE 19
 #else
-#define MACINFO "/data/.mac.info"
 #define MACINFO_EFS "/efs/wifi/.mac.info"
-#define NVMACINFO "/data/.nvmac.info"
-#define	REVINFO "/data/.rev"
-#define CIDINFO "/data/.cid.info"
-#define PSMINFO "/data/.psm.info"
-#define WIFIVERINFO "/data/.wifiver.info"
-#define ANTINFO "/data/.ant.info"
 #define WRMAC_BUF_SIZE 18
 #endif /* PLATFORM_SLP */
+#define MACINFO PLATFORM_PATH".mac.info"
+#define REVINFO PLATFORM_PATH".rev"
+#define CIDINFO PLATFORM_PATH".cid.info"
+#define PSMINFO PLATFORM_PATH".psm.info"
+#define ANTINFO PLATFORM_PATH".ant.info"
+#define WIFIVERINFO     PLATFORM_PATH".wifiver.info"
+#define NVMACINFO       PLATFORM_PAHT".nvmac.info"
 
 #ifdef BCM4330_CHIP
 #define CIS_BUF_SIZE            128
@@ -515,7 +516,7 @@ int dhd_write_rdwr_macaddr(struct ether_addr *mac)
 		set_fs(oldfs);
 		filp_close(fp_mac, NULL);
 	}
-	/* /data/.mac.info will be created */
+	/* .mac.info will be created */
 	fp_mac = filp_open(filepath_data, O_RDWR | O_CREAT, 0666);
 	if (IS_ERR(fp_mac)) {
 		DHD_ERROR(("[WIFI_SEC] %s: File open error\n", filepath_efs));
@@ -1225,7 +1226,7 @@ startwrite:
 		mac->octet[0], mac->octet[1], mac->octet[2],
 		mac->octet[3], mac->octet[4], mac->octet[5]);
 
-	/* File will be created /data/.mac.info. */
+	/* File will be created .mac.info. */
 	fp_mac = filp_open(filepath_data, O_RDWR | O_CREAT, 0666);
 
 	if (IS_ERR(fp_mac)) {
@@ -1258,7 +1259,7 @@ startwrite:
 	}
 
 	filp_close(fp_mac, NULL);
-	/* end of /data/.mac.info */
+	/* end of .mac.info */
 
 	if (filepath_efs == NULL) {
 		DHD_ERROR(("[WIFI_SEC] %s : no efs filepath", __func__));
@@ -1324,9 +1325,9 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 		/* Enable PowerSave Mode */
 		dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
 			sizeof(uint), TRUE, 0);
-		DHD_ERROR(("[WIFI_SEC] %s: /data/.psm.info open failed,"
+		DHD_ERROR(("[WIFI_SEC] %s: %s open failed,"
 			" so set PM to %d\n",
-			__FUNCTION__, *power_mode));
+			__FUNCTION__, filepath, *power_mode));
 		return;
 	} else {
 		kernel_read(fp, fp->f_pos, &power_val, 1);
@@ -1468,24 +1469,24 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 
 	switch (mode) {
 		case SET_PARAM_BUS_TXGLOM_MODE:
-			filepath = "/data/.bustxglom.info";
+			filepath = PLATFORM_PATH".bustxglom.info";
 			break;
 		case SET_PARAM_ROAMOFF:
-			filepath = "/data/.roamoff.info";
+			filepath = PLATFORM_PATH".roamoff.info";
 			break;
 #ifdef USE_WL_FRAMEBURST
 		case SET_PARAM_FRAMEBURST:
-			filepath = "/data/.frameburst.info";
+			filepath = PLATFORM_PATH".frameburst.info";
 			break;
 #endif /* USE_WL_FRAMEBURST */
 #ifdef USE_WL_TXBF
 		case SET_PARAM_TXBF:
-			filepath = "/data/.txbf.info";
+			filepath = PLATFORM_PATH".txbf.info";
 			break;
 #endif /* USE_WL_TXBF */
 #ifdef PROP_TXSTATUS
 		case SET_PARAM_PROPTX:
-			filepath = "/data/.proptx.info";
+			filepath = PLATFORM_PATH".proptx.info";
 			break;
 #endif /* PROP_TXSTATUS */
 		default:

@@ -22,7 +22,7 @@
 
 #define __MC_CLIENT_LIB_API
 
-#include "../include/mcuuid.h"
+#include "mcuuid.h"
 
 /*
  * Return values of MobiCore driver functions.

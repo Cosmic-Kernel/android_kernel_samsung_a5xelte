@@ -222,7 +222,4 @@ u32 dsim_reg_get_hozval(u32 id);
 #define DSIM_IOC_DUMP			_IOW('D', 8, u32)
 #define DSIM_IOC_VSYNC			_IOW('D', 9, u32)
 
-
-int dsim_write_hl_data(struct dsim_device *dsim, const u8 *cmd, u32 cmdSize);
-int dsim_read_hl_data(struct dsim_device *dsim, u8 addr, u32 size, u8 *buf);
 #endif /* __DSIM_H__ */

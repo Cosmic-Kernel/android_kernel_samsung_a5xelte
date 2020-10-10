@@ -89,7 +89,7 @@ enum {
 #define CAL_SKIP_ADC		11
 #define CAL_FAIL_ADC		18
 
-#define PS_CONF1_VALUE		0x6768
+#define PS_CONF1_VALUE		0x7748
 /* register settings */
 static u16 als_reg_setting[ALS_REG_NUM][2] = {
 	{REG_CS_CONF1, LIGHT_ENABLE},	/* enable */

@@ -666,8 +666,31 @@ static int dac_ev(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cod3022x_adc_mute_use_count(struct snd_soc_codec *codec, bool on)
+{
+	struct cod3022x_priv *cod3022x = snd_soc_codec_get_drvdata(codec);
+	int process_event = 0;
+
+	if(on) {
+		atomic_inc(&cod3022x->adc_mute_use_count);
+		if(atomic_read(&cod3022x->adc_mute_use_count) == 1)
+			process_event = 1;
+	} else {
+		atomic_dec(&cod3022x->adc_mute_use_count);
+		if(atomic_read(&cod3022x->adc_mute_use_count) == 0)
+			process_event = 1;
+	}
+
+	dev_dbg(codec->dev, "%s called, mute process_evnet = %d\n", __func__, process_event);
+	return process_event;
+}
+
 static void cod3022x_adc_digital_mute(struct snd_soc_codec *codec, bool on)
 {
+	dev_dbg(codec->dev, "%s called, on = %d\n", __func__, on);
+	if(!cod3022x_adc_mute_use_count(codec, on))
+		return;
+
 	if (on)
 		snd_soc_update_bits(codec, COD3022X_42_ADC1,
 				ADC1_MUTE_AD_EN_MASK, ADC1_MUTE_AD_EN_MASK);
@@ -1860,11 +1883,15 @@ static int mic2_pga_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_on_mic2(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_off_mic2(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 	default:
 		break;
@@ -1889,11 +1916,15 @@ static int mic1_pga_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_on_mic1(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_off_mic1(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 
 	default:
@@ -1919,11 +1950,15 @@ static int linein_pga_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_on_linein(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 
 	case SND_SOC_DAPM_PRE_PMD:
+		cod3022x_adc_digital_mute(w->codec, true);
 		cod3022_power_off_linein(w->codec);
+		cod3022x_adc_digital_mute(w->codec, false);
 		break;
 
 	default:

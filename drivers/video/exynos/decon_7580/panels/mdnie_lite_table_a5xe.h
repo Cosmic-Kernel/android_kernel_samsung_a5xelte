@@ -92,6 +92,22 @@ static unsigned char *adjust_ldu_data[MODE_MAX] = {
 	adjust_ldu_data_1,
 };
 
+static inline int get_hbm_index(int idx)
+{
+	int i = 0;
+	int idx_list[] = {
+		40000	/* idx < 40000: HBM_OFF */
+				/* idx >= 40000: HBM_ON */
+	};
+
+	while (i < ARRAY_SIZE(idx_list)) {
+		if (idx < idx_list[i])
+			break;
+		i++;
+	}
+
+	return i;
+}
 
 static unsigned char GRAYSCALE_1[] = {
 	0xEC,
@@ -9271,6 +9287,7 @@ static struct mdnie_tune tune_info = {
 	.adjust_ldu_table = adjust_ldu_data,
 	.max_adjust_ldu = 6,
 	.scr_info = &scr_info,
+	.get_hbm_index = get_hbm_index,
 	.color_offset = {color_offset_f1, color_offset_f2, color_offset_f3, color_offset_f4}
 };
 

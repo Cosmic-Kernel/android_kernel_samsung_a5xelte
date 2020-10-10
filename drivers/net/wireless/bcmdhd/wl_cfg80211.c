@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_cfg80211.c 624032 2016-03-10 02:53:46Z $
+ * $Id: wl_cfg80211.c 640717 2016-05-30 11:29:19Z $
  */
 /* */
 #include <typedefs.h>
@@ -893,13 +893,16 @@ static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 		enum wl_pm_workq_act_type type)
 {
 	u16 wq_duration = 0;
+	dhd_pub_t *dhd =  NULL;
 
 	if (cfg == NULL)
 		return;
 
+	dhd = (dhd_pub_t *)(cfg->pub);
+
 	if (delayed_work_pending(&cfg->pm_enable_work)) {
 		cancel_delayed_work_sync(&cfg->pm_enable_work);
-		DHD_OS_WAKE_UNLOCK(cfg->pub);
+		DHD_PM_WAKE_UNLOCK(cfg->pub);
 	}
 
 	if (type == WL_PM_WORKQ_SHORT) {
@@ -907,10 +910,15 @@ static void wl_add_remove_pm_enable_work(struct bcm_cfg80211 *cfg,
 	} else if (type == WL_PM_WORKQ_LONG) {
 		wq_duration = (WL_PM_ENABLE_TIMEOUT*2);
 	}
-	if (wq_duration) {
-		DHD_OS_WAKE_LOCK(cfg->pub);
-		schedule_delayed_work(&cfg->pm_enable_work,
-				msecs_to_jiffies((const unsigned int)wq_duration));
+
+	/* It should schedule work item only if driver is up */
+	if (wq_duration && dhd->up) {
+		if (schedule_delayed_work(&cfg->pm_enable_work,
+				msecs_to_jiffies((const unsigned int)wq_duration))) {
+			DHD_PM_WAKE_LOCK_TIMEOUT(cfg->pub, wq_duration);
+		} else {
+			WL_ERR(("Can't schedule pm work handler\n"));
+		}
 	}
 }
 
@@ -9193,6 +9201,7 @@ wl_check_pmstatus(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	if (pbuf) {
 		kfree(pbuf);
 	}
+
 	return err;
 }
 #endif	/* CUSTOM_EVENT_PM_WAKE */
@@ -12729,9 +12738,6 @@ static void wl_update_hidden_ap_ie(struct wl_bss_info *bi, u8 *ie_stream, u32 *i
 		return;
 	}
 
-	/* XXX ssidie[1] can be different with bi->SSID_len only if roaming status
-	 * On scanning the values will be same each other.
-	 */
 
 	if (ssidie[1] != ssid_len) {
 		if (ssidie[1]) {
@@ -13838,7 +13844,7 @@ static void wl_cfg80211_work_handler(struct work_struct * work)
 				wl_cfg80211_update_power_mode(iter->ndev);
 		}
 	}
-	DHD_OS_WAKE_UNLOCK(cfg->pub);
+	DHD_PM_WAKE_UNLOCK(cfg->pub);
 }
 
 u8

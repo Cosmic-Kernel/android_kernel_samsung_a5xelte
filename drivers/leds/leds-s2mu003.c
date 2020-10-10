@@ -25,6 +25,7 @@
 
 #define FLED_PINCTRL_STATE_DEFAULT "fled_default"
 #define FLED_PINCTRL_STATE_SLEEP "fled_sleep"
+#define LED_TURN_OFF -1
 
 int rear_flash_status = 0;
 struct device *flash_dev;
@@ -229,9 +230,8 @@ static void led_set(struct s2mu003_led_data *led_data)
 #endif
 	pr_info("%s start led_set\n", __func__);
 
-	if (global_led_datas[S2MU003_TORCH_LED]->data->brightness == LED_OFF) {
-		ret = s2mu003_assign_bits(led_data->i2c, reg,
-				mask, led_data->data->brightness);
+	if (global_led_datas[S2MU003_TORCH_LED]->data->brightness == LED_TURN_OFF) {
+		ret = s2mu003_assign_bits(led_data->i2c, reg, mask, 0);
 		if (ret < 0)
 			goto error_set_bits;
 
@@ -395,7 +395,7 @@ static ssize_t rear_flash_store(struct device *dev,
 {
 	int value = 0;
 	struct pinctrl *pinctrl;
-	u32 temp;
+	u32 torch_current;
 
 	if ((buf == NULL) || kstrtouint(buf, 10, &value)) {
 		return -1;
@@ -417,7 +417,7 @@ static ssize_t rear_flash_store(struct device *dev,
 				devm_pinctrl_put(pinctrl);
 		}
 
-		global_led_datas[S2MU003_TORCH_LED]->data->brightness = LED_OFF;
+		global_led_datas[S2MU003_TORCH_LED]->data->brightness = LED_TURN_OFF;
 		led_set(global_led_datas[S2MU003_TORCH_LED]);
 
 		pinctrl = devm_pinctrl_get_select(flash_dev, FLED_PINCTRL_STATE_SLEEP);
@@ -455,9 +455,23 @@ static ssize_t rear_flash_store(struct device *dev,
 		led_set(global_led_datas[S2MU003_TORCH_LED]);
 
 	} else if (1001 <= value && value <= 1010) {
-		/* Turn on Torch Step 25mA ~ 250mA */
-		temp = (value - 1000) * 25;
-		global_led_datas[S2MU003_TORCH_LED]->data->brightness = S2MU003_TORCH_BRIGHTNESS(temp);
+		/* (value) 1001, 1002, 1004, 1006, 1009
+		: (torch_step) 0(25mA), 1(50mA), 2(75mA), 3(100mA), 4(125mA) */
+		if (value <= 1001)
+			torch_current = 25;
+		else if (value <= 1002)
+			torch_current = 50;
+		else if (value <= 1004)
+			torch_current = 75;
+		else if (value <= 1006)
+			torch_current = 100;
+		else if (value <= 1009)
+			torch_current = 125;
+		else
+			torch_current = 50;
+
+		pr_info("torch current : %d mA\n", torch_current);
+		global_led_datas[S2MU003_TORCH_LED]->data->brightness = S2MU003_TORCH_BRIGHTNESS(torch_current);
 		led_set(global_led_datas[S2MU003_TORCH_LED]);
 
 	} else {

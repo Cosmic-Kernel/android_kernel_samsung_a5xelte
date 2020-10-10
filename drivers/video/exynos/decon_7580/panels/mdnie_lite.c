@@ -21,11 +21,11 @@
 
 #define MDNIE_SYSFS_PREFIX		"/sdcard/mdnie/"
 
-#define IS_DMB(idx)			(idx == DMB_NORMAL_MODE)
+#define IS_DMB(idx)				(idx == DMB_NORMAL_MODE)
 #define IS_SCENARIO(idx)		(idx < SCENARIO_MAX && !(idx > VIDEO_NORMAL_MODE && idx < CAMERA_MODE))
-#define IS_ACCESSIBILITY(idx)		(idx && idx < ACCESSIBILITY_MAX)
-#define IS_HBM(idx)			(idx >= 6)
-#define IS_HMT(idx)			(idx && idx < HMT_MDNIE_MAX)
+#define IS_ACCESSIBILITY(idx)	(idx && idx < ACCESSIBILITY_MAX)
+#define IS_HBM(idx)				(idx && idx < HBM_MAX)
+#define IS_HMT(idx)				(idx && idx < HMT_MDNIE_MAX)
 
 #define SCENARIO_IS_VALID(idx)	(IS_DMB(idx) || IS_SCENARIO(idx))
 
@@ -76,23 +76,19 @@ static struct mdnie_table *mdnie_find_table(struct mdnie_info *mdnie)
 	mutex_lock(&mdnie->lock);
 
 	if (IS_ACCESSIBILITY(mdnie->accessibility)) {
-		table = &mdnie->tune->accessibility_table[mdnie->accessibility];
+		table = mdnie->tune->accessibility_table ? &mdnie->tune->accessibility_table[mdnie->accessibility] : NULL;
 		goto exit;
-#ifdef CONFIG_LCD_HMT
 	} else if (IS_HMT(mdnie->hmt_mode)) {
-		table = &mdnie->tune->hmt_table[mdnie->hmt_mode];
+		table = mdnie->tune->hmt_table ? &mdnie->tune->hmt_table[mdnie->hmt_mode] : NULL;
 		goto exit;
-#endif
-	} else if (IS_HBM(mdnie->auto_brightness)) {
-		table = &mdnie->tune->hbm_table[HBM_ON];
+	} else if (IS_HBM(mdnie->hbm)) {
+		table = mdnie->tune->hbm_table ? &mdnie->tune->hbm_table[mdnie->hbm] : NULL;
 		goto exit;
-#if defined(CONFIG_TDMB)
 	} else if (IS_DMB(mdnie->scenario)) {
-		table = &mdnie->tune->dmb_table[mdnie->mode];
+		table = mdnie->tune->dmb_table ? &mdnie->tune->dmb_table[mdnie->mode] : NULL;
 		goto exit;
-#endif
 	} else if (IS_SCENARIO(mdnie->scenario)) {
-		table = &mdnie->tune->main_table[mdnie->scenario][mdnie->mode];
+		table = mdnie->tune->main_table ? &mdnie->tune->main_table[mdnie->scenario][mdnie->mode] : NULL;
 		goto exit;
 	}
 
@@ -445,36 +441,38 @@ static ssize_t bypass_store(struct device *dev,
 	return count;
 }
 
-static ssize_t auto_brightness_show(struct device *dev,
+static ssize_t lux_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%d, hbm: %d\n", mdnie->auto_brightness, mdnie->hbm);
+	return sprintf(buf, "%d\n", mdnie->hbm);
 }
 
-static ssize_t auto_brightness_store(struct device *dev,
+static ssize_t lux_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	struct mdnie_info *mdnie = dev_get_drvdata(dev);
-	unsigned int value;
-	int ret;
-	static unsigned int update;
+	unsigned int hbm = 0, update = 0;
+	int ret, value;
 
-	ret = kstrtouint(buf, 0, &value);
+	ret = kstrtoint(buf, 0, &value);
 	if (ret < 0)
 		return ret;
 
-	dev_info(dev, "%s: value=%d\n", __func__, value);
+	if (!mdnie->tune->get_hbm_index)
+		return ret;
 
 	mutex_lock(&mdnie->lock);
-	update = (IS_HBM(mdnie->auto_brightness) != IS_HBM(value)) ? 1 : 0;
-	mdnie->hbm = IS_HBM(value) ? HBM_ON : HBM_OFF;
-	mdnie->auto_brightness = value;
+	hbm = mdnie->tune->get_hbm_index(value);
+	update = (mdnie->hbm != hbm) ? 1 : 0;
+	mdnie->hbm = update ? hbm : mdnie->hbm;
 	mutex_unlock(&mdnie->lock);
 
-	if (update)
+	if (update) {
+		dev_info(dev, "%s: %d\n", __func__, value);
 		mdnie_update(mdnie);
+	}
 
 	return count;
 }
@@ -672,7 +670,7 @@ static struct device_attribute mdnie_attributes[] = {
 	__ATTR(accessibility, 0664, accessibility_show, accessibility_store),
 	__ATTR(color_correct, 0444, color_correct_show, NULL),
 	__ATTR(bypass, 0664, bypass_show, bypass_store),
-	__ATTR(auto_brightness, 0664, auto_brightness_show, auto_brightness_store),
+	__ATTR(lux, 0000, lux_show, lux_store),
 	__ATTR(mdnie, 0444, mdnie_show, NULL),
 	__ATTR(sensorRGB, 0664, sensorRGB_show, sensorRGB_store),
 	__ATTR(mdnie_ldu, 0664, mdnie_ldu_show, mdnie_ldu_store),
@@ -770,8 +768,8 @@ int mdnie_register(struct device *p, void *data, mdnie_w w, mdnie_r r, unsigned 
 	mdnie->ops.write = w;
 	mdnie->ops.read = r;
 
-	mdnie->coordinate[0] = coordinate[0];
-	mdnie->coordinate[1] = coordinate[1];
+	mdnie->coordinate[0] = coordinate ? coordinate[0] : 0;
+	mdnie->coordinate[1] = coordinate ? coordinate[1] : 0;
 	mdnie->tune = tune;
 
 	mutex_init(&mdnie->lock);
@@ -801,8 +799,6 @@ static int attr_store(struct device *dev,
 	struct attribute *attr, const char *buf, size_t size)
 {
 	struct device_attribute *dev_attr = container_of(attr, struct device_attribute, attr);
-
-	dev_err(dev, "%s: %s\n", __func__, attr->name);
 
 	dev_attr->store(dev, dev_attr, buf, size);
 
