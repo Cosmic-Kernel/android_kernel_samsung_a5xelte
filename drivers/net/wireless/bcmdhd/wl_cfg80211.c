@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_cfg80211.c 716297 2017-08-17 11:30:42Z $
+ * $Id: wl_cfg80211.c 793225 2018-12-07 07:37:32Z $
  */
 /* */
 #include <typedefs.h>
@@ -880,7 +880,8 @@ static int maxrxpktglom = 0;
 /* IOCtl version read from targeted driver */
 static int ioctl_version;
 #ifdef DEBUGFS_CFG80211
-#define S_SUBLOGLEVEL 20
+#define SUBLOGLEVEL 20
+#define SUBLOGLEVELZ ((SUBLOGLEVEL) + (1))
 static const struct {
 	u32 log_level;
 	char *sublogname;
@@ -893,6 +894,12 @@ static const struct {
 	{WL_DBG_P2P_ACTION, "P2PACTION"}
 };
 #endif
+
+#define BUFSZ 5
+#define BUFSZN	BUFSZ + 1
+
+#define _S(x) #x
+#define S(x) _S(x)
 
 #if defined(CUSTOMER_HW4) && defined(DHD_DEBUG)
 uint prev_dhd_console_ms = 0;
@@ -3730,7 +3737,6 @@ wl_set_key_mgmt(struct net_device *dev, struct cfg80211_connect_params *sme)
 #endif /* MFP */
 
 		WL_DBG(("setting wpa_auth to %d\n", val));
-
 		err = wldev_iovar_setint_bsscfg(dev, "wpa_auth", val, bssidx);
 		if (unlikely(err)) {
 			WL_ERR(("could not set wpa_auth (%d)\n", err));
@@ -3902,6 +3908,12 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	}
 
 	RETURN_EIO_IF_NOT_UP(cfg);
+
+#ifdef DHDTCPSYNC_FLOOD_BLK
+	if (dev) {
+		dhd_reset_tcpsync_info_by_dev(dev);
+	}
+#endif /* DHDTCPSYNC_FLOOD_BLK */
 
 	/*
 	 * Cancel ongoing scan to sync up with sme state machine of cfg80211.
@@ -4077,6 +4089,7 @@ wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 #endif
 	WL_DBG(("ie (%p), ie_len (%zd)\n", sme->ie, sme->ie_len));
 	WL_DBG(("3. set wapi version \n"));
+
 	err = wl_set_wpa_version(dev, sme);
 	if (unlikely(err)) {
 		WL_ERR(("Invalid wpa_version\n"));
@@ -8133,11 +8146,18 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, struct wl_bss_info *bi
 	u32 freq;
 	s32 err = 0;
 	gfp_t aflags;
+	u8 tmp_buf[IEEE80211_MAX_SSID_LEN + 1];
 
 	if (unlikely(dtoh32(bi->length) > WL_BSS_INFO_MAX)) {
 		WL_DBG(("Beacon is larger than buffer. Discarding\n"));
 		return err;
 	}
+
+	if (bi->SSID_len > IEEE80211_MAX_SSID_LEN) {
+		WL_ERR(("wrong SSID len:%d\n", bi->SSID_len));
+		return -EINVAL;
+	}
+
 	aflags = (in_atomic()) ? GFP_ATOMIC : GFP_KERNEL;
 	notif_bss_info = kzalloc(sizeof(*notif_bss_info) + sizeof(*mgmt)
 		- sizeof(u8) + WL_BSS_INFO_MAX, aflags);
@@ -8195,8 +8215,10 @@ static s32 wl_inform_single_bss(struct bcm_cfg80211 *cfg, struct wl_bss_info *bi
 		kfree(notif_bss_info);
 		return -EINVAL;
 	}
+	memcpy(tmp_buf, bi->SSID, bi->SSID_len);
+	tmp_buf[bi->SSID_len] = '\0';
 	WL_DBG(("SSID : \"%s\", rssi %d, channel %d, capability : 0x04%x, bssid %pM"
-			"mgmt_type %d frame_len %d\n", bi->SSID,
+			"mgmt_type %d frame_len %d\n", tmp_buf,
 			notif_bss_info->rssi, notif_bss_info->channel,
 			mgmt->u.beacon.capab_info, &bi->BSSID, mgmt_type,
 			notif_bss_info->frame_len));
@@ -10448,6 +10470,7 @@ wl_notify_sched_scan_results(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	int band = 0;
 	struct wl_pfn_scanresults *pfn_result = (struct wl_pfn_scanresults *)data;
 	int n_pfn_results = pfn_result->count;
+	u8 tmp_buf[DOT11_MAX_SSID_LEN + 1];
 
 	WL_DBG(("Enter\n"));
 
@@ -10492,16 +10515,23 @@ wl_notify_sched_scan_results(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 				err = -EINVAL;
 				goto out_err;
 			}
+			if (netinfo->pfnsubnet.SSID_len > DOT11_MAX_SSID_LEN) {
+				WL_ERR(("Wrong SSID length:%d\n",
+					netinfo->pfnsubnet.SSID_len));
+				err = -EINVAL;
+				goto out_err;
+			}
+			memcpy(tmp_buf, netinfo->pfnsubnet.SSID, netinfo->pfnsubnet.SSID_len);
+			tmp_buf[netinfo->pfnsubnet.SSID_len] = '\0';
 			WL_PNO((">>> SSID:%s Channel:%d \n",
-				netinfo->pfnsubnet.SSID, netinfo->pfnsubnet.channel));
+				tmp_buf, netinfo->pfnsubnet.channel));
 			/* PFN result doesn't have all the info which are required by the supplicant
 			 * (For e.g IEs) Do a target Escan so that sched scan results are reported
 			 * via wl_inform_single_bss in the required format. Escan does require the
 			 * scan request in the form of cfg80211_scan_request. For timebeing, create
 			 * cfg80211_scan_request one out of the received PNO event.
 			 */
-			ssid[i].ssid_len = MIN(DOT11_MAX_SSID_LEN,
-				netinfo->pfnsubnet.SSID_len);
+			ssid[i].ssid_len = netinfo->pfnsubnet.SSID_len;
 			memcpy(ssid[i].ssid, netinfo->pfnsubnet.SSID,
 				ssid[i].ssid_len);
 			request->n_ssids++;
@@ -11150,8 +11180,8 @@ static s32 wl_escan_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 
 	}
 	if (!ndev || (!wl_get_drv_status(cfg, SCANNING, ndev) && !cfg->sched_scan_running)) {
-		WL_ERR(("escan is not ready ndev %p drv_status 0x%x e_type %d e_states %d\n",
-			ndev, wl_get_drv_status(cfg, SCANNING, ndev),
+		WL_ERR(("escan is not ready drv_status 0x%x e_type %d e_states %d\n",
+			wl_get_drv_status(cfg, SCANNING, ndev),
 			ntoh32(e->event_type), ntoh32(e->status)));
 		goto exit;
 	}
@@ -11813,6 +11843,16 @@ s32 wl_cfg80211_attach_post(struct net_device *ndev)
 	wl_set_drv_status(cfg, READY, ndev);
 fail:
 	return err;
+}
+
+struct bcm_cfg80211 *wl_get_cfg(struct net_device *ndev)
+{
+	struct wireless_dev *wdev = ndev->ieee80211_ptr;
+
+	if (!wdev)
+		return NULL;
+
+	return wiphy_priv(wdev->wiphy);
 }
 
 s32 wl_cfg80211_attach(struct net_device *ndev, void *context)
@@ -13673,7 +13713,7 @@ static ssize_t
 wl_debuglevel_write(struct file *file, const char __user *userbuf,
 	size_t count, loff_t *ppos)
 {
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)], sublog[S_SUBLOGLEVEL];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)], sublog[SUBLOGLEVELZ];
 	char *params, *token, *colon;
 	uint i, tokens, log_on = 0;
 	size_t minsize = min_t(size_t, (sizeof(tbuf) - 1), count);
@@ -13684,7 +13724,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		return -EFAULT;
 	}
 
-	tbuf[minsize + 1] = '\0';
+	tbuf[minsize] = '\0';
 	params = &tbuf[0];
 	colon = strchr(params, '\n');
 	if (colon != NULL)
@@ -13699,7 +13739,7 @@ wl_debuglevel_write(struct file *file, const char __user *userbuf,
 		if (colon != NULL) {
 			*colon = ' ';
 		}
-		tokens = sscanf(token, "%s %u", sublog, &log_on);
+		tokens = sscanf(token, "%"S(SUBLOGLEVEL)"s %u", sublog, &log_on);
 		if (colon != NULL)
 			*colon = ':';
 
@@ -13730,7 +13770,7 @@ wl_debuglevel_read(struct file *file, char __user *user_buf,
 	size_t count, loff_t *ppos)
 {
 	char *param;
-	char tbuf[S_SUBLOGLEVEL * ARRAYSIZE(sublogname_map)];
+	char tbuf[SUBLOGLEVELZ * ARRAYSIZE(sublogname_map)];
 	uint i;
 	memset(tbuf, 0, sizeof(tbuf));
 	param = &tbuf[0];
@@ -14334,3 +14374,61 @@ wl_cfg80211_random_mac_disable(void)
 	return err;
 }
 #endif /* SUPPORT_RANDOM_MAC_SCAN */
+void wl_cfg80211_disassoc(struct net_device *ndev, uint32 reason)
+{
+	scb_val_t scbval;
+	s32 err;
+
+	memset(&scbval, 0x0, sizeof(scb_val_t));
+	scbval.val = htod32(reason);
+	err = wldev_ioctl_set(ndev, WLC_DISASSOC, &scbval, sizeof(scb_val_t));
+	if (err < 0) {
+		WL_ERR(("WLC_DISASSOC error %d\n", err));
+	}
+
+}
+void wl_cfg80211_del_all_sta(struct net_device *ndev, uint32 reason)
+{
+	struct net_device *dev;
+	struct bcm_cfg80211 *cfg = wl_get_cfg(ndev);
+	scb_val_t scb_val;
+	int err;
+	char mac_buf[MAX_NUM_OF_ASSOCIATED_DEV *
+		sizeof(struct ether_addr) + sizeof(uint)] = {0};
+	struct maclist *assoc_maclist = (struct maclist *)mac_buf;
+	int num_associated = 0;
+
+	dev = ndev_to_wlc_ndev(ndev, cfg);
+
+	if (p2p_is_on(cfg)) {
+		/* Suspend P2P discovery search-listen to prevent it from changing the
+		 * channel.
+		 */
+		if ((wl_cfgp2p_discover_enable_search(cfg, false)) < 0) {
+			WL_ERR(("Can not disable discovery mode\n"));
+			return;
+		}
+	}
+
+	assoc_maclist->count = MAX_NUM_OF_ASSOCIATED_DEV;
+	err = wldev_ioctl_get(ndev, WLC_GET_ASSOCLIST,
+			assoc_maclist, sizeof(mac_buf));
+	if (err < 0)
+		WL_ERR(("WLC_GET_ASSOCLIST error %d\n", err));
+	else
+		num_associated = assoc_maclist->count;
+
+	memset(scb_val.ea.octet, 0xff, ETHER_ADDR_LEN);
+	scb_val.val = DOT11_RC_DEAUTH_LEAVING;
+	scb_val.val = htod32(reason);
+	err = wldev_ioctl_set(dev, WLC_SCB_DEAUTHENTICATE_FOR_REASON, &scb_val,
+			sizeof(scb_val_t));
+	if (err < 0) {
+		WL_ERR(("WLC_SCB_DEAUTHENTICATE_FOR_REASON err %d\n", err));
+	}
+
+	if (num_associated > 0)
+		wl_delay(400);
+
+	return;
+}

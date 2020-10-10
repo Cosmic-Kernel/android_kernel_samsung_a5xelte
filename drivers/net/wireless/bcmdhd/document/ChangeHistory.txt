@@ -1,4 +1,36 @@
-BCM43xx DHD 1.141.64.80 for Android
+BCM43xx DHD 1.145.3 for Android
+(Notes: 1.145.x is twigged off from 1.141.64.80)
+
+DHD 1.145.3 - 2018.12.20
+Security Patch
+ - CS6671196(By Kang Hyung Wook) SI-13162: Disconnect WiFi when TCP sync flood attack detected
+
+
+DHD 1.145.2 - 2018.11.14
+Security Patch
+ - CS5120366(By Jeong Min Cheol) SI-11983: Fixed potential buffer overflow due to sscanf
+ - CS5368479(By Min SungBin) SI-12312: Hided pointer information
+ - CS5549090(By Min SungBin) SI-11784: Added the validation routine of ifidx variable to fix the security issue
+ - CS6156404(By Kang Hyung Wook) SI-12974: Fixed to be not print out ndev pointer for security issue
+ - CS6196908(By Kang Hyung Wook) SI-11983: Changed the SUBLOGLEVELZ definition to correct form to fix the security issue
+ - V2018072201 Fixed OOB read in the wl_inform_single_bss() function
+ - V2018072202 Fixed OOB write in the wl_notify_sched_scan_results() function
+
+Others
+ - CS5488359(By Min SungBin) Added Qatar country regrev QA/6 in translate_custom_table for BCM4354 chipset
+   (This patch should be sync up with BCM4354 - FW 7.26.28.10 or higher version)
+ - Fixed the out-of-the-bound read due to bcm_atoi()
+
+
+DHD 1.145.1 - 2018.04.17
+Security Patch
+ - CVE-2017-13161 V2017092501 Fixed buffer overrun issue in wl_parse_ssid_list_tlv()
+ - CVE-2017-13292 V2018010201 Fixed buffer overflow in wl_get_assoc_ies() during assoc_info iovar results handling
+
+Others
+ - CS3947123(By Kim Gwang Min) Fixed the reconnection failure problem while connecting corporate AP
+ - Code sync with Samsung local code for Galaxy-A5(BCM43454)
+
 
 DHD 1.141.64.80 - 2017.09.06
 Security Patch

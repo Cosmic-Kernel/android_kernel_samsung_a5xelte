@@ -174,6 +174,9 @@ $(warning WiFi will be using Legacy file path)
 endif
 endif
 
+# TCP SYNC flood attack block
+DHDCFLAGS += -DDHDTCPSYNC_FLOOD_BLK -DTCP_SYNC_FLOOD_LIMIT=50
+
 ##############################
 # Android Platform Definition
 ##############################
@@ -254,6 +257,9 @@ endif
   DHDCFLAGS += -DCUSTOM_BCN_TIMEOUT_IN_SUSPEND=10
   DHDCFLAGS += -DCUSTOM_ROAM_TIME_THRESH_IN_SUSPEND=6000
   DHDCFLAGS += -DMAX_DTIM_ALLOWED_INTERVAL=925
+
+# Support Qatar 5G band 36-64, 100-144, 149-165 channels
+  DHDCFLAGS += -DDHD_SUPPORT_QA_6
 endif
 
 ifneq ($(CONFIG_BCM4339),)

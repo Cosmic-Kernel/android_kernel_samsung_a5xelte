@@ -4,7 +4,7 @@
  * Provides type definitions and function prototypes used to link the
  * DHD OS, bus, and protocol modules.
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -24,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd.h 700407 2017-05-19 03:32:21Z $
+ * $Id: dhd.h 793225 2018-12-07 07:37:32Z $
  */
 
 /****************
@@ -220,6 +220,20 @@ extern void dhd_log_dump_write(int type, const char *fmt, ...);
 extern char *dhd_log_dump_get_timestamp(void);
 #endif /* DHD_LOG_DUMP */
 #define DHD_COMMON_DUMP_PATH	"/data/misc/wifi/log/"
+
+#define DIV64_U64(x, y)         div64_u64(x, y)
+#define DIV_U64(x, y)           div_u64(x, y)
+#define DO_DIV(x, y)            do_div(x, y)
+
+#ifndef USEC_PER_SEC
+#define USEC_PER_SEC (1000 * 1000)
+#endif /* USEC_PER_SEC */
+
+#define SEC_USEC_FMT \
+	"%llu.%6u"
+
+#define GET_SEC_USEC(t) \
+	DIV_U64(t, USEC_PER_SEC), (unsigned int)DO_DIV(t,  USEC_PER_SEC)
 
 /* Common structure for module and instance linkage */
 typedef struct dhd_pub {
@@ -1087,11 +1101,11 @@ extern int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val);
 #endif /* CUSTOMER_HW4 && USE_WFA_CERT_CONF */
 
 #ifdef DHD_LEGACY_FILE_PATH
-#define PLATFORM_PATH	"/data/"
+#define PLATFORM_PATH  "/data/"
 #elif defined(PLATFORM_SLP)
-#define PLATFORM_PATH	"/opt/etc/"
+#define PLATFORM_PATH  "/opt/etc/"
 #else
-#define PLATFORM_PATH	"/data/misc/conn/"
+#define PLATFORM_PATH  "/data/misc/conn/"
 #endif /* DHD_LEGACY_FILE_PATH */
 
 /*

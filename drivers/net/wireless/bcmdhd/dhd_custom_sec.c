@@ -320,6 +320,16 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"US", "US", 988},
 	{"CU", "US", 988},
 	{"CA", "Q2", 993},
+#if defined(DHD_SUPPORT_QA_6)
+	/* Support Qatar 5G band 36-64 100-144 149-165 channels
+	 * This QA/6 should be used only BCM4354 Chipset and
+	 * FW version should be sync up with 7.26.28.10 or higher version.
+	 * If Use the old FW ver before 7.26.28.10, Country QA/6 is not supported.
+	 * So when changing the country code to QA, It will be returned to fail and
+	 * still previous Country code
+	 */
+	{"QA", "QA", 6},
+#endif /* DHD_SUPPORT_QA_6 */
 #endif /* default ccode/regrev */
 };
 
@@ -1373,6 +1383,7 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 	uint32 btc_mode = 0;
 	char *filepath = ANTINFO;
 	uint chip_id = dhd_bus_chip_id(dhd);
+	char *p_ant_val = NULL;
 
 	/* Check if this chip can support MIMO */
 	if (chip_id != BCM4324_CHIP_ID &&
@@ -1390,14 +1401,16 @@ int dhd_sel_ant_from_file(dhd_pub_t *dhd)
 		DHD_ERROR(("[WIFI_SEC] %s: File [%s] open error\n", __FUNCTION__, filepath));
 		return ret;
 	} else {
-		ret = kernel_read(fp, 0, (char *)&ant_val, 4);
+		ret = kernel_read(fp, 0, (char *)&ant_val, sizeof(uint32));
 		if (ret < 0) {
 			DHD_ERROR(("[WIFI_SEC] %s: File read error, ret=%d\n", __FUNCTION__, ret));
 			filp_close(fp, NULL);
 			return ret;
 		}
 
-		ant_val = bcm_atoi((char *)&ant_val);
+		p_ant_val = (char *)&ant_val;
+		p_ant_val[sizeof(uint32) - 1] = '\0';
+		ant_val = bcm_atoi(p_ant_val);
 
 		DHD_ERROR(("[WIFI_SEC]%s: ANT val = %d\n", __FUNCTION__, ant_val));
 		filp_close(fp, NULL);
@@ -1447,6 +1460,7 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 	struct file *fp = NULL;
 	char *filepath = NULL;
 	int val = 0;
+	char *p_val = NULL;
 
 	if (!dhd || (mode < SET_PARAM_BUS_TXGLOM_MODE) ||
 		(mode >= PARAM_LAST_VALUE)) {
@@ -1488,7 +1502,7 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 			__FUNCTION__, filepath));
 		return BCME_ERROR;
 	} else {
-		if (kernel_read(fp, fp->f_pos, (char *)&val, 4) < 0) {
+		if (kernel_read(fp, fp->f_pos, (char *)&val, sizeof(uint32)) < 0) {
 			filp_close(fp, NULL);
 			/* File operation is failed so we will return error code */
 			DHD_ERROR(("[WIFI_SEC] %s: read failed, file path=%s\n",
@@ -1498,7 +1512,9 @@ int sec_get_param_wfa_cert(dhd_pub_t *dhd, int mode, uint* read_val)
 		filp_close(fp, NULL);
 	}
 
-	val = bcm_atoi((char *)&val);
+	p_val = (char *)&val;
+	p_val[sizeof(uint32) - 1] = '\0';
+	val = bcm_atoi(p_val);
 
 	switch (mode) {
 		case SET_PARAM_ROAMOFF:

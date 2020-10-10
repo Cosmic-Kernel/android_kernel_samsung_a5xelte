@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_cfg80211.h 693818 2017-04-05 06:24:49Z $
+ * $Id: wl_cfg80211.h 793225 2018-12-07 07:37:32Z $
  */
 
 #ifndef _wl_cfg80211_h_
@@ -1035,6 +1035,8 @@ extern int wl_cfg80211_register_if(struct bcm_cfg80211 *cfg, int ifidx, struct n
 extern int wl_cfg80211_remove_if(struct bcm_cfg80211 *cfg, int ifidx, struct net_device* ndev);
 extern int wl_cfg80211_scan_stop(bcm_struct_cfgdev *cfgdev);
 extern bool wl_cfg80211_is_concurrent_mode(void);
+extern void wl_cfg80211_disassoc(struct net_device *ndev, uint32 reason);
+extern void wl_cfg80211_del_all_sta(struct net_device *ndev, uint32 reason);
 extern void* wl_cfg80211_get_dhdp(void);
 extern bool wl_cfg80211_is_p2p_active(void);
 extern void wl_cfg80211_dbg_level(u32 level);

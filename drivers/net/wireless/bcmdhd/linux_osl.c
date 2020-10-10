@@ -1,7 +1,7 @@
 /*
  * Linux OS Independent Layer
  *
- * Copyright (C) 1999-2017, Broadcom Corporation
+ * Copyright (C) 1999-2018, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.c 657428 2016-09-01 06:51:47Z $
+ * $Id: linux_osl.c 793225 2018-12-07 07:37:32Z $
  */
 
 #define LINUX_PORT
@@ -298,7 +298,7 @@ int osl_static_mem_init(osl_t *osh, void *adapter)
 				kfree(osh);
 				return -ENOMEM;
 			} else {
-				printk("alloc static buf at %p!\n", bcm_static_buf);
+				printk("succeed to alloc static buf\n");
 			}
 
 			sema_init(&bcm_static_buf->static_sem, 1);
@@ -1214,6 +1214,31 @@ osl_sleep(uint ms)
 	msleep(ms);
 }
 
+uint64
+osl_localtime_ns(void)
+{
+	uint64 ts_nsec = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
+	ts_nsec = local_clock();
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36) */
+
+	return ts_nsec;
+}
+
+void
+osl_get_localtime(uint64 *sec, uint64 *usec)
+{
+	uint64 ts_nsec = 0;
+	unsigned long rem_nsec = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
+	ts_nsec = local_clock();
+	rem_nsec = do_div(ts_nsec, NSEC_PER_SEC);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36) */
+	*sec = (uint64)ts_nsec;
+	*usec = (uint64)(rem_nsec / MSEC_PER_SEC);
+}
 
 
 /* Clone a packet.
