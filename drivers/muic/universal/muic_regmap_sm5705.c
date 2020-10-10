@@ -703,6 +703,11 @@ static int sm5705_afc_ta_attach(struct regmap_desc *pdesc)
 
 	pr_info("%s:%s AFC_TA_ATTACHED \n",MUIC_DEV_NAME, __func__);
 
+	if (pmuic->pdata->afc_disable) {
+		pr_info("%s: %s AFC is disabled by USER!\n", MUIC_DEV_NAME, __func__);
+		return 0;
+	}
+
 	// read clear : AFC_STATUS
 	value = muic_i2c_read_byte(i2c, REG_AFCSTAT);
 	if (value < 0)

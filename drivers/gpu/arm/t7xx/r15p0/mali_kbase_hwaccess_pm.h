@@ -1,7 +1,6 @@
 /*
  *
- * (C) COPYRIGHT 2014-2015 ARM Limited. All rights reserved.
- *
+ * (C) COPYRIGHT 2014-2017 ARM Limited. All rights reserved. *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
  * Foundation, and any use by you of this program is subject to the terms
@@ -108,6 +107,7 @@ void kbase_hwaccess_pm_resume(struct kbase_device *kbdev);
  *              pointer)
  */
 void kbase_hwaccess_pm_gpu_active(struct kbase_device *kbdev);
+void kbase_hwaccess_pm_gpu_keep_active_nolock(struct kbase_device *kbdev);
 
 /**
  * Perform any required actions for idling the GPU. Called when the last

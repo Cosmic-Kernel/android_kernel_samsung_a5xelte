@@ -11,8 +11,11 @@
  */
 
 #include <linux/mfd/samsung/s2mu003.h>
+#include <linux/mfd/samsung/s2mu003-private.h>
 #include <linux/battery/charger/s2mu003_charger.h>
 #include <linux/version.h>
+#include <linux/leds-s2mu003.h>
+#include <linux/i2c.h>
 
 #ifdef CONFIG_USB_HOST_NOTIFY
 #include <linux/usb_notify.h>
@@ -28,6 +31,7 @@
 #define EN_TR_IRQ 0
 #define EN_OTGFAIL_IRQ 1
 #define EN_MIVR_SW_REGULATION 0
+#define EN_BSTINL_IRQ 1
 #define EN_BST_IRQ 0
 #define MINVAL(a, b) ((a <= b) ? a : b)
 
@@ -666,6 +670,12 @@ static void s2mu003_charger_initialize(struct s2mu003_charger_data *charger)
 {
 	int temp, temp1;
 
+	/* MRSTB enable & set 3 sec debounce time */
+	temp = s2mu003_reg_read(charger->client, 0x47);
+  	temp |= 0x08;
+  	temp &= 0xF8;
+	s2mu003_reg_write(charger->client, 0x47, temp);
+
 	/* 0. enable ULDO */
 	temp = s2mu003_reg_read(charger->client, 0x41);
 	temp |= 0x40;
@@ -1273,6 +1283,64 @@ static void s2mu003_ovp_work(struct work_struct *work)
 	}
 }
 
+static int s2mu003_led_init(struct i2c_client *i2c)
+{
+	int ret = 0;
+#ifdef CONFIG_S2MU003_LEDS_I2C
+	int mask, value;
+#endif
+	ret = s2mu003_assign_bits(i2c, 0x89, 0x0f, 0x0f);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CTRL0, 0x87, 0x07);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CTRL2,
+			S2MU003_EN_CHANNEL_SHARE_MASK, 0x80);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CTRL2,
+			S2MU003_BOOST_VOUT_FLASH_MASK, 0x23);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_Buck_LDO_CTRL, 0x01, 0x01);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CH1_CTRL3, 0x80, 0x80);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CH1_CTRL3,
+			S2MU003_TIMEOUT_MAX, S2MU003_FLASH_TIMEOUT_992MS);
+	if (ret < 0)
+		goto out;
+
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CH1_CTRL2,
+			S2MU003_TIMEOUT_MAX, S2MU003_TORCH_TIMEOUT_15728MS);
+	if (ret < 0)
+		goto out;
+
+#ifdef CONFIG_S2MU003_LEDS_I2C
+	value =	S2MU003_FLASH_TORCH_OFF;
+	mask = S2MU003_TORCH_ENABLE_MASK | S2MU003_FLASH_ENABLE_MASK;
+	ret = s2mu003_assign_bits(i2c, S2MU003_FLED_CH1_CTRL4,
+		mask, value);
+	if (ret < 0)
+		goto out;
+#endif
+	pr_info("%s : led setup complete\n", __func__);
+	return ret;
+
+out:
+	pr_err("%s : led setup fail\n", __func__);
+	return ret;
+}
+
 static irqreturn_t s2mu003_chg_vin_ovp_irq_handler(int irq, void *data)
 {
 	struct s2mu003_charger_data *charger = data;
@@ -1372,6 +1440,47 @@ static irqreturn_t s2mu003_chg_otp_tr_irq_handler(int irq, void *data)
 }
 #endif
 
+#if EN_BSTINL_IRQ
+static irqreturn_t s2mu003_chg_lbp_bst_irq_handler(int irq, void *data)
+{
+	int temp;
+	int intc1m, intc2m, intc3m, intfm;
+	struct s2mu003_charger_data *charger = data;
+	pr_info("%s: Low battery on boost mode interrupt\n", __func__);
+
+	intc1m = s2mu003_reg_read(charger->client, S2MU003_CHG_INT1M);
+	intc2m = s2mu003_reg_read(charger->client, S2MU003_CHG_INT2M);
+	intc3m = s2mu003_reg_read(charger->client, S2MU003_CHG_INT3M);
+	intfm = s2mu003_reg_read(charger->client, S2MU003_FLED_INTM);
+
+	s2mu003_led_forced_control(0);
+
+	temp = s2mu003_reg_read(charger->client, 0x07);
+	temp |= 0x81;
+	s2mu003_reg_write_once(charger->client, 0x07, temp);
+
+	temp = s2mu003_reg_read(charger->client, 0x2E);
+	pr_info("%s: Charger, Flash LED reset 0x2E:0x%x\n", __func__, temp);
+	temp = s2mu003_reg_read(charger->client, 0x02);
+	pr_info("%s: 0x02 : 0x%x\n", __func__, temp);
+
+	s2mu003_reg_write(charger->client, S2MU003_CHG_INT1M, intc1m);
+	s2mu003_reg_write(charger->client, S2MU003_CHG_INT2M, intc2m);
+	s2mu003_reg_write(charger->client, S2MU003_CHG_INT3M, intc3m);
+	s2mu003_reg_write(charger->client, S2MU003_FLED_INTM, intfm);
+
+	s2mu003_led_init(charger->client);
+	s2mu003_charger_initialize(charger);
+
+	s2mu003_assign_bits(charger->client, 0x24, 0xCC, 0x00);
+	s2mu003_assign_bits(charger->client, 0x2A, 0xCC, 0x00);
+
+	s2mu003_led_forced_control(1);
+
+	return IRQ_HANDLED;
+}
+#endif
+
 const struct s2mu003_chg_irq_handler s2mu003_chg_irq_handlers[] = {
 {
 		.name = "chg_batp",
@@ -1431,6 +1540,13 @@ const struct s2mu003_chg_irq_handler s2mu003_chg_irq_handlers[] = {
 		.irq_index = S2MU003_CHGVINVR_IRQ,
 	},
 #endif /* EN_MIVR_SW_REGULATION */
+#if EN_BSTINL_IRQ
+	{
+		.name = "chg_bstinlv",
+		.handler = s2mu003_chg_lbp_bst_irq_handler,
+		.irq_index = S2MU003_BSTINLV_IRQ,
+	},
+#endif
 #if EN_BST_IRQ
 	{
 		.name = "chg_bstilim",
@@ -1740,6 +1856,8 @@ static int s2mu003_charger_resume(struct device *dev)
 
 static void s2mu003_charger_shutdown(struct device *dev)
 {
+	int temp;
+
 	struct s2mu003_charger_data *charger =
 		dev_get_drvdata(dev);
 
@@ -1757,6 +1875,21 @@ static void s2mu003_charger_shutdown(struct device *dev)
 		msleep(50);
 		s2mu003_set_bits(charger->client, S2MU003_CHG_CTRL3, S2MU003_CHG_EN_MASK);
 	}
+
+	temp = s2mu003_reg_read(charger->client, S2MU003_CHG_STATUS);
+	pr_info("%s: S2MU003_CHG_STATUS : 0x%x\n", __func__, temp);
+	if (temp & 0x08) {
+		/* Charger reset : 0x07[7]=1, FLED reset : 0x07[0]=1  */
+		pr_info("%s: Charger, FLED reset for work-around\n", __func__);
+		temp = s2mu003_reg_read(charger->client, 0x07);
+		temp |= 0x81;
+		s2mu003_reg_write_once(charger->client, 0x07, temp);
+
+		temp = s2mu003_reg_read(charger->client, 0x2E);
+		pr_info("%s: Flash LED/Charger reset 0x2E:0x%x\n", __func__, temp);
+		temp = s2mu003_reg_read(charger->client, 0x02);
+		pr_info("%s: 0x02 : 0x%x\n", __func__, temp);
+	}	
 }
 
 static SIMPLE_DEV_PM_OPS(s2mu003_charger_pm_ops, s2mu003_charger_suspend,

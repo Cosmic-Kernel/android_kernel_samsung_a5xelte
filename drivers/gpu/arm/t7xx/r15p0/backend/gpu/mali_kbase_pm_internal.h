@@ -475,8 +475,7 @@ bool kbase_pm_metrics_is_active(struct kbase_device *kbdev);
  * @is_resume: true if power on due to resume after suspend,
  *             false otherwise
  */
-void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
-
+ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
 /**
  * kbase_pm_do_poweroff - Power off the GPU, and any cores that have been
  *                        requested.

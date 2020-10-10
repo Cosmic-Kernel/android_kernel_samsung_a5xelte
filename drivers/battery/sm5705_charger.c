@@ -453,9 +453,9 @@ static int sm5705_CHG_set_FASTCHG(struct sm5705_charger_data *charger,
 		union power_supply_propval value_temp;
 		psy_do_property("battery", get, POWER_SUPPLY_PROP_TEMP, value_temp);
 		if (value_temp.intval < charger->pdata->swelling_low_temp_recov)
-			swelling_charging_current = charger->pdata->swelling_low_chg_current;
+			swelling_charging_current = charger->pdata->swelling_low_temp_current;
 		else
-			swelling_charging_current = charger->pdata->swelling_high_chg_current;
+			swelling_charging_current = charger->pdata->swelling_high_temp_current;
 
 		if (FASTCHG_mA > swelling_charging_current) {
 			FASTCHG_mA = swelling_charging_current;
@@ -714,12 +714,15 @@ static void sm5705_enable_charging_on_switch(struct sm5705_charger_data *charger
 static int sm5705_set_charge_current(struct sm5705_charger_data *charger,
 				unsigned short charge_current)
 {
+	union power_supply_propval value;
 	if (!(__n_is_cable_type_for_wireless(charger->cable_type))) {
 		sm5705_CHG_set_FASTCHG(charger, SM5705_CHG_SRC_WPC, charge_current);
 	} else {
 		sm5705_CHG_set_FASTCHG(charger, SM5705_CHG_SRC_VBUS, charge_current);
 	}
-
+	value.intval = charge_current;
+	psy_do_property("battery", set,
+			POWER_SUPPLY_PROP_CURRENT_AVG, value);
 	return 0;
 }
 
@@ -2099,28 +2102,28 @@ static int _parse_battery_node_propertys(struct device *dev, struct device_node 
 	}
 
 #if defined(CONFIG_BATTERY_SWELLING)
-	ret = of_property_read_u32(np, "battery,swelling_high_chg_current",
-		&pdata->swelling_high_chg_current);
+	ret = of_property_read_u32(np, "battery,swelling_high_temp_current",
+		&pdata->swelling_high_temp_current);
 	if (IS_ERR_VALUE(ret)) {
-		pr_info("%s: swelling high temp chg current is Empty\n", __func__);
-		pdata->swelling_high_chg_current = 1000;
+		pr_info("%s: swelling high temp chg current is Empty, Default value is 1300 \n", __func__);
+		pdata->swelling_high_temp_current = 1300;
 	}
 
-	ret = of_property_read_u32(np, "battery,swelling_low_chg_current",
-		&pdata->swelling_low_chg_current);
+	ret = of_property_read_u32(np, "battery,swelling_low_temp_current",
+		&pdata->swelling_low_temp_current);
 	if (IS_ERR_VALUE(ret)) {
-		pr_info("%s: swelling low temp chg current is Empty\n", __func__);
-		pdata->swelling_low_chg_current = 1000;
+		pr_info("%s: swelling low temp chg current is Empty, Default value is 600 \n", __func__);
+		pdata->swelling_low_temp_current = 600;
 	}
 
 	ret = of_property_read_u32(np, "battery,swelling_high_temp_recov",
 				   &pdata->swelling_high_temp_recov);
 	if (IS_ERR_VALUE(ret)) {
 		pr_info("%s: swelling high temp recovery is Empty\n", __func__);
-		pdata->swelling_low_temp_recov = 360;
+		pdata->swelling_high_temp_recov = 390;
 	}
 
-	ret = of_property_read_u32(np, "battery,swelling_low_temp_recov",
+	ret = of_property_read_u32(np, "battery,swelling_low_temp_recov_1st",
 				   &pdata->swelling_low_temp_recov);
 	if (IS_ERR_VALUE(ret)) {
 		pr_info("%s: swelling low temp recovery is Empty\n", __func__);

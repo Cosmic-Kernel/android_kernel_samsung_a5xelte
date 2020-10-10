@@ -42,6 +42,12 @@
 
 #include <linux/sec_batt.h>
 
+#define SEC_BAT_CURRENT_EVENT_NONE					0x0000
+#define SEC_BAT_CURRENT_EVENT_AFC					0x0001
+#define SEC_BAT_CURRENT_EVENT_LOW_TEMP_SWELLING		0x0010
+#define SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING	0x0020
+#define SEC_BAT_CURRENT_EVENT_LOW_TEMP				0x0080
+
 #if defined(CONFIG_CHARGING_VZWCONCEPT)
 #define STORE_MODE_CHARGING_MAX 35
 #define STORE_MODE_CHARGING_MIN 30
@@ -79,6 +85,8 @@ struct sec_battery_info {
 #if defined(CONFIG_VBUS_NOTIFIER)
 	struct notifier_block vbus_nb;
 #endif
+	bool safety_timer_set;
+	bool lcd_status;
 
 	int status;
 	int health;
@@ -92,12 +100,14 @@ struct sec_battery_info {
 	int current_avg;		/* average current (mA) */
 	int current_max;		/* input current limit (mA) */
 	int current_adc;
-
+	unsigned int current_event;
+	unsigned int input_voltage;		/* CHGIN/WCIN input voltage (V) */
 	unsigned int capacity;			/* SOC (%) */
 
 
 
 	struct mutex adclock;
+	struct mutex current_eventlock;
 	struct adc_sample_info	adc_sample[ADC_CH_COUNT];
 
 	/* keep awake until monitor is done */
@@ -192,6 +202,7 @@ struct sec_battery_info {
 
 	int wire_status;
 
+	int charging_current;
 	/* wearable charging */
 	int ps_enable;
 	int ps_status;
@@ -213,6 +224,10 @@ struct sec_battery_info {
 	int stability_test;
 	int eng_not_full_status;
 
+	bool stop_timer;
+	unsigned long prev_safety_time;
+	unsigned long expired_time;
+	unsigned long cal_safety_time;
 #if defined(CONFIG_BATTERY_SWELLING_SELF_DISCHARGING)
 	bool factory_self_discharging_mode_on;
 	bool force_discharging;
@@ -240,6 +255,8 @@ struct sec_battery_info {
 	bool complete_timetofull;
 	struct delayed_work timetofull_work;
 #endif
+	int batt_cycle;
+
 #if defined(CONFIG_BATTERY_SMART)
 	bool detect_invalid_port;
 #endif
@@ -361,10 +378,10 @@ enum {
 	FG_FIRMWARE,
 	DETECT_INVALID_PORT,
 #endif
-#if defined(CONFIG_BATTERY_AGE_FORECAST)
 	FG_CYCLE,
 	FG_FULL_VOLTAGE,
-#endif
+	FG_FULLCAPNOM,
+	BATTERY_CYCLE,
 	FACTORY_MODE_RELIEVE,
 	FACTORY_MODE_BYPASS,
 };

@@ -469,6 +469,14 @@ static int muic_probe(struct i2c_client *i2c,
 		pmuic->is_rustproof = false;
 	}
 
+	if (get_afc_mode() == CH_MODE_AFC_DISABLE_VAL) {
+		pr_info("  AFC mode disabled\n");
+		pmuic->pdata->afc_disable = true;
+	} else {
+		pr_info("  AFC mode enabled\n");
+		pmuic->pdata->afc_disable = false;
+	}
+
 	/* Register chipset register map. */
 	muic_register_regmap(&pdesc, pmuic);
 	pdesc->muic = pmuic;

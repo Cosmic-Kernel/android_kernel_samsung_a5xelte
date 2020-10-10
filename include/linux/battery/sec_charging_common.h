@@ -406,6 +406,19 @@ extern const char *charger_chip_name;
 #define sec_charging_current_t \
 	struct sec_charging_current
 
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+struct sec_age_data {
+	unsigned int cycle;
+	unsigned int float_voltage;
+	unsigned int recharge_condition_vcell;
+	unsigned int full_condition_vcell;
+	unsigned int full_condition_soc;
+};
+
+#define sec_age_data_t \
+	struct sec_age_data
+#endif
+
 struct sec_battery_platform_data {
 	/* NO NEED TO BE CHANGED */
 	/* callback functions */
@@ -479,9 +492,12 @@ struct sec_battery_platform_data {
 	/* battery swelling */
 	int swelling_high_temp_block;
 	int swelling_high_temp_recov;
-	int swelling_low_temp_block;
-	int swelling_low_temp_recov;
-	unsigned int swelling_chg_current;
+	int swelling_low_temp_block_1st;
+	int swelling_low_temp_recov_1st;
+	int swelling_low_temp_block_2nd;
+	int swelling_low_temp_recov_2nd;
+	unsigned int swelling_low_temp_current;
+	unsigned int swelling_high_temp_current;
 	unsigned int swelling_high_chg_current;
 	unsigned int swelling_low_chg_current;
 	unsigned int swelling_full_check_current_2nd;
@@ -490,6 +506,7 @@ struct sec_battery_platform_data {
 	unsigned int swelling_high_rechg_voltage;
 	unsigned int swelling_low_rechg_voltage;
 	unsigned int swelling_block_time;
+	unsigned int swelling_normal_current;
 	unsigned int swelling_high_temp_topoff;
 	unsigned int swelling_low_temp_topoff;
 
@@ -660,6 +677,12 @@ struct sec_battery_platform_data {
 #else
 	int chg_float_voltage;
 #endif
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	int num_age_step;
+	int age_step;
+	int age_data_length;
+	sec_age_data_t* age_data;
+#endif
 	sec_charger_functions_t chg_functions_setting;
 
 	bool fake_capacity;
@@ -668,6 +691,11 @@ struct sec_battery_platform_data {
 
 	/* ADC setting */
 	unsigned int adc_check_count;
+
+	unsigned int expired_time;
+	unsigned int recharging_expired_time;
+	int standard_curr;
+
 	/* ADC type for each channel */
 	unsigned int adc_type[];
 };
@@ -708,8 +736,8 @@ struct sec_charger_platform_data {
 	int siop_hv_wireless_input_limit_current;
 	int siop_hv_wireless_charging_limit_current;
 
-	unsigned int swelling_high_chg_current;
-	unsigned int swelling_low_chg_current;
+	unsigned int swelling_low_temp_current;
+	unsigned int swelling_high_temp_current;
 	
 	int swelling_low_temp_recov;
 	int swelling_high_temp_recov;
@@ -756,6 +784,10 @@ struct sec_fuelgauge_platform_data {
 	int capacity_min;
 	int rcomp0;
 	int rcomp_charging;
+
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	unsigned int full_condition_soc;
+#endif
 };
 
 #define sec_battery_platform_data_t \

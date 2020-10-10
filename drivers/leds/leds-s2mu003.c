@@ -27,6 +27,16 @@
 #define FLED_PINCTRL_STATE_SLEEP "fled_sleep"
 #define LED_TURN_OFF -1
 
+static u8 leds_cur_max[] = {
+	S2MU003_FLASH_OUT_I_900MA,
+	S2MU003_TORCH_OUT_I_400MA,
+};
+
+static u8 leds_time_max[] = {
+	S2MU003_FLASH_TIMEOUT_992MS,
+	S2MU003_TORCH_TIMEOUT_15728MS,
+};
+
 int rear_flash_status = 0;
 struct device *flash_dev;
 
@@ -489,6 +499,73 @@ static ssize_t rear_flash_store(struct device *dev,
 
 static DEVICE_ATTR(rear_flash, 0644, rear_flash_show, rear_flash_store);
 static DEVICE_ATTR(rear_torch_flash, 0644, rear_flash_show, rear_flash_store);
+
+int s2mu003_led_forced_control(int value)
+{
+	struct pinctrl *pinctrl;
+	int torch_gpio;
+	int flash_gpio;
+	int ret;
+
+	pr_info("[LED]%s , value:%d, rear_flash_status: %d\n", __func__, value, rear_flash_status);
+
+	if (value == 0) {
+		/* AP control and goio to be 'Low' */
+		if (rear_flash_status != 1) {
+			pinctrl = devm_pinctrl_get_select(flash_dev, FLED_PINCTRL_STATE_DEFAULT);
+			if (IS_ERR_OR_NULL(pinctrl))
+				pr_err("%s: flash %s pins are not configured\n", __func__, FLED_PINCTRL_STATE_DEFAULT);
+			else
+				devm_pinctrl_put(pinctrl);
+			pr_info("[LED]%s , rear_flash_status is activation \n", __func__);
+		}
+
+		torch_gpio = global_led_datas[S2MU003_TORCH_LED]->torch_pin;
+		if (gpio_is_valid(torch_gpio)) {
+			pr_err("%s : torch_gpio(%d) is valid\n", __func__, torch_gpio);
+			ret = devm_gpio_request(global_led_datas[S2MU003_TORCH_LED]->cdev.dev, torch_gpio,
+					"s2mu003_gpio");
+			if (ret) {
+				pr_err("%s : fail to assignment gpio\n", __func__);
+				goto error;
+			}
+		} else {
+			pr_err("%s : torch_gpio(%d) is not valid\n", __func__, torch_gpio);
+		}
+		gpio_direction_output(torch_gpio, 0);
+
+		flash_gpio = global_led_datas[S2MU003_TORCH_LED]->flash_pin;
+		if (gpio_is_valid(flash_gpio)) {
+			pr_err("%s : flash_gpio(%d) is valid\n", __func__, flash_gpio);
+			ret = devm_gpio_request(global_led_datas[S2MU003_TORCH_LED]->cdev.dev, flash_gpio,
+					"s2mu003_gpio");
+			if (ret) {
+				pr_err("%s : fail to assignment gpio\n", __func__);
+				goto error;
+			}
+		} else {
+			pr_err("%s : flash_gpio(%d) is not valid\n", __func__, flash_gpio);
+		}
+		gpio_direction_output(flash_gpio, 0);
+
+		devm_gpio_free(global_led_datas[S2MU003_TORCH_LED]->cdev.dev, flash_gpio);
+		devm_gpio_free(global_led_datas[S2MU003_TORCH_LED]->cdev.dev, torch_gpio);
+
+	} else if (value == 1) {
+		/* ISP control */
+		pinctrl = devm_pinctrl_get_select(flash_dev, FLED_PINCTRL_STATE_SLEEP);
+		if (IS_ERR_OR_NULL(pinctrl)) {
+			pr_err("%s: flash %s pins are not configured\n", __func__, FLED_PINCTRL_STATE_SLEEP);
+		} else {
+			devm_pinctrl_put(pinctrl);
+			rear_flash_status = 0;
+		}
+	}
+
+error:
+	return ret;
+
+}
 
 #if defined(CONFIG_OF)
 static int s2mu003_led_dt_parse_pdata(struct s2mu003_mfd_chip *iodev,
