@@ -565,6 +565,10 @@ int sec_ts_execute_force_calibration(struct sec_ts_data *ts, int cal_mode);
 void sec_ts_delay(unsigned int ms);
 int sec_ts_fn_init(struct sec_ts_data *ts);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern void trustedui_mode_on(void);
+#endif
+
 extern unsigned int lcdtype;
 
 #ifdef CONFIG_BATTERY_SAMSUNG

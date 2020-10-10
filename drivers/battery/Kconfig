@@ -33,12 +33,6 @@ config BATTERY_SWELLING_SELF_DISCHARGING
 	help
 	 Say Y to include support for prevent battery swelling with self discharging
 
-config SW_SELF_DISCHARGING
-	bool "enable sw_self_discharging"
-	default n
-	help
-	  Say Y to enable CONFIG_SW_SELF_DISCHARGING
-
 config INBATTERY
 	bool "is inbattery or not"
 	default n

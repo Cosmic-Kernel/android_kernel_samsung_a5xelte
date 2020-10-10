@@ -506,6 +506,11 @@ EXPORT_SYMBOL(sm5705_fled_prepare_flash);
 
 int sm5705_fled_torch_on(unsigned char index)
 {
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
+		return 0;
+	}
+
 	dev_info(g_sm5705_fled->dev, "%s: Torch - ON : E\n", __func__);
 
 	if (fimc_is_activated != 1) {
@@ -543,6 +548,11 @@ EXPORT_SYMBOL(sm5705_fled_torch_on);
 
 int sm5705_fled_flash_on(unsigned char index)
 {
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
+		return 0;
+	}
+
 	dev_info(g_sm5705_fled->dev, "%s: Flash - ON : E\n", __func__);
 
 	sm5705_fled_lock(g_sm5705_fled);
@@ -586,6 +596,11 @@ int sm5705_fled_close_flash(unsigned char index)
 {
 	if (fimc_is_activated == 0) {
 		/* skip to overlapping function calls */
+		return 0;
+	}
+
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
 		return 0;
 	}
 

@@ -697,6 +697,7 @@ u32 BUTTON_MAPPING_KEY[MAX_SUPPORTED_BUTTON_NUM] = {
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 struct bt532_ts_info *tui_tsp_info;
+extern int tui_force_close(uint32_t arg);
 #endif
 
 /* define i2c sub functions*/
@@ -2056,8 +2057,8 @@ static void clear_report_data(struct bt532_ts_info *info)
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 void trustedui_mode_on(void){
-	//tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
-	//clear_report_data(tui_tsp_info);
+	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+	clear_report_data(tui_tsp_info);
 	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s : esd timer disable", __func__);
 #if ESD_TIMER_INTERVAL
 	esd_timer_stop(tui_tsp_info);
@@ -4279,6 +4280,17 @@ static void clear_cover_mode(void *device_data)
 		if (finfo->cmd_param[0] > 1) {
 			info->flip_enable = true;
 			info->cover_type = finfo->cmd_param[1];
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+			if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+				msleep(100);
+				tui_force_close(1);
+				msleep(200);
+				if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+					trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+					trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+				}
+			}
+#endif // CONFIG_TRUSTONIC_TRUSTED_UI		
 		} else {
 			info->flip_enable = false;
 		}
@@ -4463,6 +4475,11 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute
 		goto err_out;
 	}
 
+	if (strlen(buf) >= TSP_CMD_STR_LEN) {		
+		tsp_debug_err(true, &client->dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
+		goto err_out;
+	}
+
 	/* check lock  */
 	mutex_lock(&finfo->cmd_lock);
 	finfo->cmd_is_running = true;
@@ -4519,7 +4536,7 @@ static ssize_t store_cmd(struct device *dev, struct device_attribute
 				param_cnt++;
 			}
 			cur++;
-		} while (cur - buf <= len);
+		} while ((cur - buf <= len) && (param_cnt < TSP_CMD_PARAM_NUM));
 	}
 
 	tsp_debug_info(true, &client->dev, "cmd = %s\n", tsp_cmd_ptr->cmd_name);

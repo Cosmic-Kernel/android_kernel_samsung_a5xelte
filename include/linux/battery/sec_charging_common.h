@@ -612,6 +612,10 @@ struct sec_battery_platform_data {
 	/* reset charging for abnormal malfunction (0: not use) */
 	unsigned long charging_reset_time;
 
+	unsigned int hv_charging_total_time;
+	unsigned int normal_charging_total_time;
+	unsigned int usb_charging_total_time;	
+
 	/* fuel gauge */
 	char *fuelgauge_name;
 	int fg_irq;
@@ -812,5 +816,46 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 	((extended >> ONLINE_TYPE_SUB_SHIFT)&0xf)
 #define GET_POWER_CABLE_TYPE(extended)	\
 	((extended >> ONLINE_TYPE_PWR_SHIFT)&0xf)
+
+#if defined(CONFIG_WIRELESS_CHARGER_HIGH_VOLTAGE)
+#define is_hv_wireless_type(cable_type) ( \
+	cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS || \
+	cable_type == POWER_SUPPLY_TYPE_HV_WIRELESS_ETX)
+
+#define is_nv_wireless_type(cable_type)	( \
+	cable_type == POWER_SUPPLY_TYPE_WIRELESS || \
+	cable_type == POWER_SUPPLY_TYPE_PMA_WIRELESS)
+#else
+#define is_hv_wireless_type(cable_type) (false)
+#define is_nv_wireless_type(cable_type)	(cable_type == POWER_SUPPLY_TYPE_WIRELESS)
+#endif
+
+#define is_wireless_type(cable_type) \
+	(is_hv_wireless_type(cable_type) || is_nv_wireless_type(cable_type))
+
+#if defined(CONFIG_WIRELESS_CHARGER_HIGH_VOLTAGE)
+#define is_not_wireless_type(cable_type) ( \
+	cable_type != POWER_SUPPLY_TYPE_WIRELESS && \
+	cable_type != POWER_SUPPLY_TYPE_PMA_WIRELESS && \
+	cable_type != POWER_SUPPLY_TYPE_HV_WIRELESS && \
+	cable_type != POWER_SUPPLY_TYPE_HV_WIRELESS_ETX)
+#else
+#define is_not_wireless_type(cable_type) (cable_type != POWER_SUPPLY_TYPE_WIRELESS)
+#endif
+
+#define is_wired_type(cable_type) \
+	(is_not_wireless_type(cable_type) && (cable_type != POWER_SUPPLY_TYPE_BATTERY))
+
+#define is_hv_afc_wire_type(cable_type) ( \
+	cable_type == POWER_SUPPLY_TYPE_HV_ERR || \
+	cable_type == POWER_SUPPLY_TYPE_HV_MAINS || \
+	cable_type == POWER_SUPPLY_TYPE_HV_UNKNOWN)
+
+#define is_hv_wire_9v_type(cable_type) ( \
+	cable_type == POWER_SUPPLY_TYPE_HV_ERR || \
+	cable_type == POWER_SUPPLY_TYPE_HV_MAINS || \
+	cable_type == POWER_SUPPLY_TYPE_HV_UNKNOWN) /* ???? */
+
+#define is_hv_wire_type(cable_type) (is_hv_afc_wire_type(cable_type))
 
 #endif /* __SEC_CHARGING_COMMON_H */
