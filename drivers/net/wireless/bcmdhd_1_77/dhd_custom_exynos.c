@@ -23,7 +23,7 @@
  *
  * <<Broadcom-WL-IPTag/Open:>>
  *
- * $Id: dhd_custom_exynos.c 690177 2017-03-15 03:19:27Z $
+ * $Id: dhd_custom_exynos.c 717405 2017-08-24 05:58:34Z $
  */
 #include <linux/device.h>
 #include <linux/gpio.h>
@@ -59,9 +59,10 @@
 #endif /* !CONFIG_ARCH_SWA100 && !CONFIG_MACH_UNIVERSAL7580 */
 #endif /* CONFIG_64BIT */
 
-#if !defined(CONFIG_ARCH_SWA100) && !defined(CONFIG_SOC_EXYNOS7870)
+#if defined(CONFIG_MACH_UNIVERSAL7580) || defined(CONFIG_MACH_UNIVERSAL5430) || \
+	defined(CONFIG_MACH_UNIVERSAL5422)
 #include <mach/irqs.h>
-#endif /* !CONFIG_ARCH_SWA100 && !CONFIG_MACH_UNIVERSAL7580 */
+#endif /* CONFIG_MACH_UNIVERSAL7580 || CONFIG_MACH_UNIVERSAL5430 || CONFIG_MACH_UNIVERSAL5422 */
 
 #include <linux/sec_sysfs.h>
 
@@ -109,7 +110,7 @@ extern void exynos_pcie_poweroff(int);
 #endif /* CONFIG_MACH_UNIVERSAL5433 */
 #endif /* EXYNOS_PCIE_RC_ONOFF */
 
-#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870))
+#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_MACH_UNIVERSAL7580))
 extern struct mmc_host *wlan_mmc;
 extern void mmc_ctrl_power(struct mmc_host *host, bool onoff);
 #endif /* CONFIG_MACH_UNIVERSAL3475 || CONFIG_SOC_EXYNOS7870 */
@@ -166,7 +167,7 @@ dhd_wlan_power(int onoff)
 			printk(KERN_INFO "%s WLAN SDIO GPIO control error\n", __FUNCTION__);
 	}
 #endif /* CONFIG_MACH_A7LTE */
-#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870))
+#if (defined(CONFIG_MACH_UNIVERSAL3475) || defined(CONFIG_SOC_EXYNOS7870) || defined(CONFIG_MACH_UNIVERSAL7580))
 	if (wlan_mmc)
 		mmc_ctrl_power(wlan_mmc, onoff);
 #endif /* CONFIG_MACH_UNIVERSAL3475 || CONFIG_SOC_EXYNOS7870 */
@@ -257,6 +258,7 @@ dhd_wlan_init_gpio(void)
 	}
 #ifdef CONFIG_BCMDHD_PCIE
 	gpio_direction_output(wlan_pwr_on, 1);
+	msleep(WIFI_TURNON_DELAY);
 #else
 	gpio_direction_output(wlan_pwr_on, 0);
 #endif /* CONFIG_BCMDHD_PCIE */
@@ -264,7 +266,6 @@ dhd_wlan_init_gpio(void)
 	if (wlan_dev)
 		gpio_export_link(wlan_dev, "WLAN_REG_ON", wlan_pwr_on);
 
-	msleep(WIFI_TURNON_DELAY);
 #ifdef EXYNOS_PCIE_RC_ONOFF
 	exynos_pcie_poweron(SAMSUNG_PCIE_CH_NUM);
 #endif /* EXYNOS_PCIE_RC_ONOFF */
